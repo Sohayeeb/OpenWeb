@@ -29,6 +29,8 @@ export interface OpenWebNode {
   previewUrl: string
   /** Files published on this run. */
   published: number
+  /** Drive version after publishing, so a gateway can wait for this exact state. */
+  version: number
   close(): Promise<void>
 }
 
@@ -78,6 +80,7 @@ export async function startNode(options: NodeOptions = {}): Promise<OpenWebNode>
     address: site.address,
     previewUrl: `http://127.0.0.1:${port}/`,
     published,
+    version: (site.drive as unknown as { version: number }).version,
     async close() {
       await closing(server)
       await discovery.destroy()

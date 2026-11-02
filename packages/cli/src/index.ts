@@ -182,6 +182,11 @@ async function main(): Promise<void> {
         timeoutMs: args.timeout,
       })
 
+      // A read-only drive can sync an older version of the site first. Wait for
+      // the version we just published before crawling, or the index starts
+      // with yesterday's page.
+      await gateway.waitForVersion(node.address, node.version, 10_000)
+
       console.log('openweb is running\n')
       console.log('  site      ' + gateway.url + node.address + '/')
       console.log('  browser   ' + gateway.url)

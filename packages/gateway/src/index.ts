@@ -44,6 +44,8 @@ export interface GatewayOptions {
 
 export interface Gateway {
   url: string
+  /** Wait until the read-only drive has caught up to a published version. */
+  waitForVersion(address: string, version: number, timeoutMs?: number): Promise<boolean>
   close(): Promise<void>
 }
 
@@ -303,6 +305,16 @@ export async function startGateway(options: GatewayOptions = {}): Promise<Gatewa
 
   return {
     url: `http://127.0.0.1:${port}/`,
+    async waitForVersion(address: string, version: number, ms = 10_000): Promise<boolean> {
+      const drive = await driveFor(address)
+      const current = (): number => (drive as unknown as { version: number }).version
+      const deadline = Date.now() + ms
+      while (Date.now() < deadline) {
+        if (current() >= version) return true
+        await new Promise((resolvePromise) => setTimeout(resolvePromise, 50))
+      }
+      return current() >= version
+    },
     async close() {
       await closing(server)
       await swarm.destroy()
