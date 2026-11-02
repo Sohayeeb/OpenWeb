@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="openweb:browser" content="on" />
+    <title>Directory — OpenWeb</title>
+    <meta
+      name="description"
+      content="A hand-kept directory of this OpenWeb site: notes, a garden, coffee, and the rules of the road."
+    />
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header class="site-head">
+      <div class="wrap">
+        <a class="brand" href="/">Open<span>Web</span></a>
+        <nav class="site-nav" aria-label="Site">
+          <a href="/">home</a>
+          <a href="/directory.html" aria-current="page">directory</a>
+          <a href="/search.html">search</a>
+          <a href="/publish.html">publish</a>
+          <a href="/about.html">about</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="wrap">
+      <p class="eyebrow">Directory</p>
+      <h1 class="display">One human, one key, one page at a time.</h1>
+      <p class="lede">
+        This is not a search result. It is a list a person kept. Every entry was
+        opened, read, and linked by hand. If a page is here, somebody thought it
+        was worth your time.
+      </p>
+
+      <section class="section">
+        <p class="eyebrow">In this site</p>
+        <div class="grid">
+          <a class="card" href="/hello.html">
+            <span class="kicker">Note · 2 min</span>
+            <h3>Hello from a laptop</h3>
+            <p>
+              A page that only exists because two machines agreed to talk. The
+              short version of why the address is the site.
+            </p>
+            <span class="arrow">read →</span>
+          </a>
+          <a class="card" href="/garden.html">
+            <span class="kicker">Garden · 3 min</span>
+            <h3>Tomatoes, grown badly</h3>
+            <p>
+              Clay soil, small fruit, no optimization. A page about doing
+              something slowly because the doing is the point.
+            </p>
+            <span class="arrow">visit →</span>
+          </a>
+          <a class="card" href="/coffee.html">
+            <span class="kicker">Kitchen · 1 min</span>
+            <h3>Coffee without a machine</h3>
+            <p>
+              A grinder, a kettle, and four minutes. Written after buying too
+              many devices and using none of them.
+            </p>
+            <span class="arrow">brew →</span>
+          </a>
+          <a class="card" href="/publish.html">
+            <span class="kicker">How-to · 5 min</span>
+            <h3>Publish your own page</h3>
+            <p>
+              From a folder on your PC to an address somebody else can open. No
+              account, no host, no build step.
+            </p>
+            <span class="arrow">learn how →</span>
+          </a>
+          <a class="card" href="/about.html">
+            <span class="kicker">Rules · 2 min</span>
+            <h3>What this is, and is not</h3>
+            <p>
+              The one rule, the three refusals, and the limitations we are not
+              pretending away.
+            </p>
+            <span class="arrow">read →</span>
+          </a>
+          <a class="card" href="/search.html">
+            <span class="kicker">Tool</span>
+            <h3>Search this machine's index</h3>
+            <p>
+              The crawler only reads what you seed. The index is a file you can
+              copy, inspect, or delete.
+            </p>
+            <span class="arrow">search →</span>
+          </a>
+        </div>
+      </section>
+
+      <hr class="rule" />
+
+      <section class="split">
+        <div>
+          <p class="eyebrow">Elsewhere</p>
+          <h2>Other sites have keys, not names.</h2>
+          <p class="lede">
+            An OpenWeb address is a public key written as <code>ow1…</code>. There
+            is no registrar and no lookup table, so a link has to carry the key
+            with it. The gateway's <em>sites</em> page lists everything this
+            machine has crawled.
+          </p>
+        </div>
+        <div>
+          <h3>Add a site to your index</h3>
+          <pre><code>node packages/cli/dist/index.js crawl &lt;address&gt; \
+  --dir .openweb --max 200</code></pre>
+          <p class="tiny">
+            Crawling is a choice, not a background process. Coverage is exactly
+            what you asked for.
+          </p>
+        </div>
+      </section>
+
+      <section class="section">
+        <p class="eyebrow">The gate</p>
+        <h2>A directory is a promise to have looked.</h2>
+        <p class="lede">
+          OpenWeb cannot delete the rest of the internet. It can refuse to carry
+          it. The browser extension in this repository exists for that one job:
+          allow the local gateway and the sites you have reviewed, block the
+          rest. No allow-once button. Adding a site is a deliberate edit.
+        </p>
+      </section>
+    </main>
+
+    <footer class="site-foot">
+      <div class="wrap">
+        <p><strong>OpenWeb</strong> — a directory, not an algorithm.</p>
+        <p class="tiny">Every link above was placed by hand.</p>
+      </div>
+    </footer>
+  </body>
+</html>

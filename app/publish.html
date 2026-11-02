@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="openweb:browser" content="on" />
+    <title>Publish — OpenWeb</title>
+    <meta
+      name="description"
+      content="Put a folder on the peer-to-peer web in one command. No account, no host, no build step."
+    />
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header class="site-head">
+      <div class="wrap">
+        <a class="brand" href="/">Open<span>Web</span></a>
+        <nav class="site-nav" aria-label="Site">
+          <a href="/">home</a>
+          <a href="/directory.html">directory</a>
+          <a href="/search.html">search</a>
+          <a href="/publish.html" aria-current="page">publish</a>
+          <a href="/about.html">about</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="wrap">
+      <p class="eyebrow">Publish</p>
+      <h1 class="display">Your PC is the host. That is the whole plan.</h1>
+      <p class="lede">
+        A site is a folder. Serving it is one command. The address is a key that
+        belongs to you, not a name rented from somebody else.
+      </p>
+
+      <div class="prose">
+        <p>
+          OpenWeb does not need a deployment pipeline because there is nowhere to
+          deploy to. The files stay on your disk. The node announces the drive's
+          key on a DHT and answers readers directly. When you stop the process,
+          the site goes offline. When you start it again, the same address comes
+          back.
+        </p>
+      </div>
+
+      <section class="section">
+        <p class="eyebrow">Step one</p>
+        <h2>Make a folder with an <code>index.html</code>.</h2>
+        <pre><code>my-site/
+├── index.html
+├── style.css
+└── another-page.html</code></pre>
+        <p class="hint">
+          Static files only. No JavaScript runs in v1. Relative links and links
+          that start with <code>/</code> both work.
+        </p>
+      </section>
+
+      <section class="section">
+        <p class="eyebrow">Step two</p>
+        <h2>Publish it.</h2>
+        <pre><code>node packages/cli/dist/index.js serve my-site</code></pre>
+        <p class="hint">
+          Or, after <code>npm link</code>, just <code>openweb serve my-site</code>.
+          The state lives in <code>.openweb/</code> and the keypair never leaves
+          your machine.
+        </p>
+        <pre><code>online
+
+  address   ow1vkmfwikivezc27lqizjyoapya2bqhyh63d6hofbn6rdpemdtybdq
+  preview   http://127.0.0.1:7777/
+  published 3 file(s) from my-site</code></pre>
+      </section>
+
+      <section class="section">
+        <p class="eyebrow">Step three</p>
+        <h2>Open the address through a gateway.</h2>
+        <pre><code>node packages/cli/dist/index.js open &lt;address&gt;</code></pre>
+        <p class="hint">
+          The gateway resolves the key, joins the drive's topic, and speaks plain
+          HTTP to your browser. It is the only bridge between the two worlds.
+        </p>
+      </section>
+
+      <section class="section">
+        <p class="eyebrow">Step four</p>
+        <h2>Let people find it.</h2>
+        <p class="lede">
+          There is no global index. A search engine on OpenWeb is a crawler plus
+          an index file that one person owns. Seed it with your address:
+        </p>
+        <pre><code>node packages/cli/dist/index.js crawl &lt;address&gt; --dir .openweb --max 200
+node packages/cli/dist/index.js search "your words" --dir .openweb</code></pre>
+        <p class="hint">
+          Or point the gateway at it and use the search box in the browser bar:
+          <code>http://127.0.0.1:8080/search?q=your+words</code>.
+        </p>
+      </section>
+
+      <hr class="rule" />
+
+      <section class="split">
+        <div>
+          <p class="eyebrow">Rules of the road</p>
+          <h2>Small, signed, and accountable.</h2>
+        </div>
+        <table>
+          <tbody>
+            <tr><td>No ads</td><td>Nothing to sell means nothing to optimize for.</td></tr>
+            <tr><td>No trackers</td><td>The gateway sets no cookies and logs no visitors.</td></tr>
+            <tr><td>No AI</td><td>Publish what you wrote. A human reviews the directory.</td></tr>
+            <tr><td>No take-backs</td><td>Your key is your name. Revocation is a signed tombstone.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <p class="section">
+        <a href="/directory.html">← back to the directory</a>
+      </p>
+    </main>
+
+    <footer class="site-foot">
+      <div class="wrap">
+        <p><strong>OpenWeb</strong> — one command between a folder and the web.</p>
+        <p class="tiny">No deploy button. No account. No bill.</p>
+      </div>
+    </footer>
+  </body>
+</html>

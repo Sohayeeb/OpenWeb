@@ -1,0 +1,26 @@
+{
+  "name": "openweb",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "A peer-to-peer web with no ads, no trackers, and no AI slop.",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "tsc -b --clean",
+    "typecheck": "tsc -b --pretty false",
+    "test": "npm run build && node --test packages/index/dist/engine.test.js",
+    "bench": "npm run build && node packages/cli/dist/index.js bench",
+    "e2e": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/e2e.ps1",
+    "e2e:search": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/search-e2e.ps1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0"
+  }
+}

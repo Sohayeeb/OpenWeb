@@ -1,0 +1,19 @@
+{
+  "name": "@openweb/cli",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "openweb": "./dist/index.js"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@openweb/core": "*",
+    "@openweb/gateway": "*",
+    "@openweb/index": "*",
+    "@openweb/node": "*"
+  }
+}

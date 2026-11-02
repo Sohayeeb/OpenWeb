@@ -1,0 +1,9 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.openweb/
+.dbg/
+.test-openweb/
+.test-search/
+.test-start/
+.DS_Store

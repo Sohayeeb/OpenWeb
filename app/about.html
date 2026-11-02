@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="openweb:browser" content="on" />
+    <title>About — OpenWeb</title>
+    <meta
+      name="description"
+      content="What OpenWeb is, the one rule, and the limits we are not pretending away."
+    />
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header class="site-head">
+      <div class="wrap">
+        <a class="brand" href="/">Open<span>Web</span></a>
+        <nav class="site-nav" aria-label="Site">
+          <a href="/">home</a>
+          <a href="/directory.html">directory</a>
+          <a href="/search.html">search</a>
+          <a href="/publish.html">publish</a>
+          <a href="/about.html" aria-current="page">about</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="wrap">
+      <p class="eyebrow">About</p>
+      <h1 class="display">A neighborhood with a gate.</h1>
+      <p class="lede">
+        OpenWeb is not trying to replace the World Wide Web. It is trying to
+        keep a small part of it honest: pages made by people, served by those
+        people, and found without an auction.
+      </p>
+
+      <div class="prose">
+        <p>
+          The modern web is mostly a delivery mechanism for advertising and
+          surveillance. Even the good parts are wrapped in scripts that decide
+          what you are allowed to read. OpenWeb removes the middle and keeps the
+          page. HTML, CSS, images, and a signature. That is the format.
+        </p>
+        <p>
+          <strong>The one rule:</strong> content is published by a human who
+          signs it with a key, and it appears in a directory only after a human
+          has looked at it. Everything else is unregulated. There is no
+          algorithm to please, because there is no feed.
+        </p>
+      </div>
+
+      <section class="section">
+        <p class="eyebrow">The shape</p>
+        <h2>Four layers, each small enough to read.</h2>
+        <div class="grid">
+          <a class="card" href="/hello.html">
+            <span class="kicker">01 · Address</span>
+            <h3>A key, not a name</h3>
+            <p>
+              <code>ow1…</code> is the public half of a keypair. Encoding is
+              reversible, so resolution needs no registry and no DNS.
+            </p>
+            <span class="arrow">see it in a page →</span>
+          </a>
+          <a class="card" href="/publish.html">
+            <span class="kicker">02 · Drive</span>
+            <h3>An append-only log</h3>
+            <p>
+              A site is a Hyperdrive: signed blocks of files. A tampered block
+              fails to load, which is the entire integrity model.
+            </p>
+            <span class="arrow">publish one →</span>
+          </a>
+          <a class="card" href="/search.html">
+            <span class="kicker">03 · Search</span>
+            <h3>A crawler plus a file</h3>
+            <p>
+              There is no global index. You crawl the seeds you trust, write an
+              index you own, and answer queries locally.
+            </p>
+            <span class="arrow">query it →</span>
+          </a>
+          <a class="card" href="/directory.html">
+            <span class="kicker">04 · Discovery</span>
+            <h3>A human kept the list</h3>
+            <p>
+              The directory is a signed log of recommendations. Anyone can mirror
+              it. Nobody can quietly edit it.
+            </p>
+            <span class="arrow">read the list →</span>
+          </a>
+        </div>
+      </section>
+
+      <hr class="rule" />
+
+      <section class="split">
+        <div>
+          <p class="eyebrow">Limits</p>
+          <h2>What this is not, yet.</h2>
+          <p class="lede">
+            A small web has small coverage. We would rather say that out loud
+            than pretend a crawl is the whole world.
+          </p>
+        </div>
+        <table>
+          <tbody>
+            <tr><td>Coverage</td><td>Seeds you choose, plus the links those pages contain.</td></tr>
+            <tr><td>Uptime</td><td>The author's machine. Sleep it and the site sleeps.</td></tr>
+            <tr><td>JavaScript</td><td>None in v1. Static pages only, by design.</td></tr>
+            <tr><td>Ranking</td><td>BM25 over words. No synonyms, no fuzzy matching, no personalization.</td></tr>
+            <tr><td>Search index</td><td>One local JSON file. Roughly 3.4 KB per page at 20,000 pages.</td></tr>
+            <tr><td>Names</td><td>Petnames live in signed directory entries, never in the protocol.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="section">
+        <p class="eyebrow">Why bother</p>
+        <h2>Because a page can be finished.</h2>
+        <div class="prose">
+          <p>
+            The web used to have edges. You could reach the end of a site, close
+            the tab, and be done. OpenWeb is an attempt to make that feeling
+            structural instead of nostalgic: no infinite feed, no recommendation
+            engine, no notification waiting to pull you back.
+          </p>
+          <p>
+            It will not win. It does not need to. It needs to exist, be small
+            enough to understand, and belong to the people who use it.
+          </p>
+        </div>
+      </section>
+
+      <blockquote>
+        A web that can go offline is a web that belongs to somebody.
+        <footer>OpenWeb — draft 0.1</footer>
+      </blockquote>
+
+      <p class="section">
+        <a href="/directory.html">← back to the directory</a>
+      </p>
+    </main>
+
+    <footer class="site-foot">
+      <div class="wrap">
+        <p><strong>OpenWeb</strong> — small, signed, accountable.</p>
+        <p class="tiny">No ads. No trackers. No AI. No hosting bill.</p>
+      </div>
+    </footer>
+  </body>
+</html>

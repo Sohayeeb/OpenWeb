@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="openweb:browser" content="on" />
+    <title>Hello from a laptop — OpenWeb</title>
+    <meta
+      name="description"
+      content="A note written on a laptop, published as a signed folder, and read from another machine over a DHT."
+    />
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header class="site-head">
+      <div class="wrap">
+        <a class="brand" href="/">Open<span>Web</span></a>
+        <nav class="site-nav" aria-label="Site">
+          <a href="/">home</a>
+          <a href="/directory.html">directory</a>
+          <a href="/search.html">search</a>
+          <a href="/publish.html">publish</a>
+          <a href="/about.html">about</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="wrap">
+      <p class="eyebrow">Note · from a laptop</p>
+      <h1 class="display">This page is a folder on somebody's PC.</h1>
+      <p class="lede">
+        No server. No CDN. No build step. Just a drive, a key, and a port that
+        isn't even open.
+      </p>
+
+      <div class="prose">
+        <p>
+          Somewhere, a laptop is sitting on a desk with a folder called
+          <code>app</code> in it. That folder contains a handful of HTML files and
+          one stylesheet. It also contains a keypair. The public half of that
+          keypair is the address you typed to get here.
+        </p>
+        <p>
+          The gateway you are reading through asked the DHT who has that address.
+          A peer answered. Blocks were exchanged, signatures were checked, and
+          the HTML arrived. You did not connect to a data center. You connected
+          to a computer that could be switched off at any moment.
+        </p>
+        <p>
+          <strong>That is the entire uptime model.</strong> There is no failover,
+          no replica, and no status page. If the machine sleeps, the site sleeps.
+          A web that can go offline is a web that belongs to somebody.
+        </p>
+      </div>
+
+      <pre><code>address   ow1…………………………………………………………………………
+preview   http://127.0.0.1:7777/
+published 9 file(s) from app</code></pre>
+
+      <p class="tiny">
+        The real address is in the address bar above. It is 55 characters long
+        and it is also a public key.
+      </p>
+
+      <hr class="rule" />
+
+      <section class="split">
+        <div>
+          <p class="eyebrow">What just happened</p>
+          <h2>Four small steps.</h2>
+        </div>
+        <ol class="steps">
+          <li><strong>You opened a key.</strong> The address decoded back into 32 bytes.</li>
+          <li><strong>The gateway joined a topic.</strong> That topic is the drive's discovery key.</li>
+          <li><strong>A peer answered.</strong> Hole punching, or a relay that sees ciphertext only.</li>
+          <li><strong>You read a signed file.</strong> A tampered drive fails to load.</li>
+        </ol>
+      </section>
+
+      <p class="section">
+        <a href="/directory.html">← back to the directory</a>
+      </p>
+    </main>
+
+    <footer class="site-foot">
+      <div class="wrap">
+        <p><strong>OpenWeb</strong> — hello from a machine, not a platform.</p>
+        <p class="tiny">Written by a person. Served by a peer.</p>
+      </div>
+    </footer>
+  </body>
+</html>

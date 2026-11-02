@@ -1,0 +1,21 @@
+{
+  "name": "@openweb/node",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@openweb/core": "*",
+    "b4a": "^1.9.0",
+    "corestore": "^7.16.1",
+    "hyperdrive": "^13.3.4",
+    "hyperswarm": "^4.17.2"
+  }
+}

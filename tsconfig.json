@@ -1,0 +1,10 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/core" },
+    { "path": "packages/index" },
+    { "path": "packages/node" },
+    { "path": "packages/gateway" },
+    { "path": "packages/cli" }
+  ]
+}

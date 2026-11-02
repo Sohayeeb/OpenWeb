@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="openweb:browser" content="on" />
+    <title>Search — OpenWeb</title>
+    <meta
+      name="description"
+      content="Query the local OpenWeb index. No personalization, no click tracking, no ads."
+    />
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header class="site-head">
+      <div class="wrap">
+        <a class="brand" href="/">Open<span>Web</span></a>
+        <nav class="site-nav" aria-label="Site">
+          <a href="/">home</a>
+          <a href="/directory.html">directory</a>
+          <a href="/search.html" aria-current="page">search</a>
+          <a href="/publish.html">publish</a>
+          <a href="/about.html">about</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="wrap">
+      <p class="eyebrow">Search</p>
+      <h1 class="display">A search engine small enough to own.</h1>
+      <p class="lede">
+        There is no global index and no company behind this box. The gateway on
+        your machine answers from a JSON file built by a crawler you started.
+        Coverage is the honest part: it is exactly what you seeded.
+      </p>
+
+      <form class="searchbar" action="/search" method="get" role="search">
+        <input
+          type="search"
+          name="q"
+          placeholder="e.g. compost, coffee, title:garden"
+          aria-label="Search the local index"
+          autocomplete="off"
+          autofocus
+        />
+        <button type="submit">search</button>
+      </form>
+      <p class="hint">
+        This form is handled by the local gateway at
+        <code>/search</code>. It does not send your query anywhere else.
+      </p>
+
+      <section class="section">
+        <p class="eyebrow">Query syntax</p>
+        <h2>Small, but not a toy.</h2>
+        <table>
+          <thead>
+            <tr><th>Write</th><th>Get</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>tomato soil</code></td><td>Both words must appear.</td></tr>
+            <tr><td><code>"slow garden"</code></td><td>Those words, in that order.</td></tr>
+            <tr><td><code>tomato -coffee</code></td><td>Pages with tomato, without coffee.</td></tr>
+            <tr><td><code>title:garden</code></td><td>The word must be in the title.</td></tr>
+            <tr><td><code>compost OR beans</code></td><td>Either word may appear.</td></tr>
+          </tbody>
+        </table>
+        <p class="hint">
+          Words are Porter-stemmed, so <code>tomatoes</code> matches
+          <code>tomato</code>. Ranking is BM25 with a title boost. No
+          personalization, no click tracking, no ads.
+        </p>
+      </section>
+
+      <hr class="rule" />
+
+      <section class="split">
+        <div>
+          <p class="eyebrow">Build the index</p>
+          <h2>You decide what gets read.</h2>
+          <p class="lede">
+            Crawling is manual. Point the crawler at an address and it follows
+            the links it finds, up to a depth and a page limit.
+          </p>
+        </div>
+        <div>
+          <pre><code>node packages/cli/dist/index.js crawl &lt;address&gt; \
+  --dir .openweb --max 200
+
+node packages/cli/dist/index.js search "slow garden" \
+  --dir .openweb</code></pre>
+          <p class="tiny">
+            The index is <code>.openweb/index.json</code>. Copy it, inspect it,
+            or delete it. It is yours.
+          </p>
+        </div>
+      </section>
+
+      <section class="section">
+        <p class="eyebrow">Machine-readable</p>
+        <h2>The same answer, as JSON.</h2>
+        <pre><code>/search?q=coffee&amp;format=json
+
+{
+  "query": "coffee",
+  "cached": false,
+  "tookMs": 0.184,
+  "total": 1,
+  "indexed": 9,
+  "results": [ … ]
+}</code></pre>
+        <p class="hint">
+          The gateway caches the parsed index by mtime and keeps the last 256
+          queries. Repeat searches are effectively free.
+        </p>
+      </section>
+
+      <p class="section">
+        <a href="/directory.html">← back to the directory</a>
+      </p>
+    </main>
+
+    <footer class="site-foot">
+      <div class="wrap">
+        <p><strong>OpenWeb</strong> — no ranking by clicks, no personalization.</p>
+        <p class="tiny">The index is a file on your disk. That is the whole trick.</p>
+      </div>
+    </footer>
+  </body>
+</html>

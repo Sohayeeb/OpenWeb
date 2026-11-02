@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "OpenWeb Mode",
+  "version": "0.0.1",
+  "description": "Allow only human-reviewed OpenWeb sites. Block everything else.",
+  "permissions": ["declarativeNetRequest", "storage"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "OpenWeb mode"
+  }
+}
