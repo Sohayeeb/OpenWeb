@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OpenWeb Mode — settings</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0a0a0b;
+        --panel: #121214;
+        --panel-2: #17171a;
+        --fg: #ece9e2;
+        --dim: #9a968d;
+        --faint: #6d6a64;
+        --line: #26262a;
+        --line-2: #34343a;
+        --accent: #9ae6b4;
+        --accent-dim: #4f7a5f;
+        --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: radial-gradient(48rem 26rem at 50% -10%, #152018 0%, transparent 60%), var(--bg);
+        color: var(--fg);
+        font: 15px/1.65 var(--mono);
+      }
+      main { width: min(52rem, 100% - 2rem); margin: 0 auto; padding: 3rem 0 5rem; }
+      a { color: var(--accent); text-decoration: none; }
+      a:hover { text-decoration: underline; text-underline-offset: 3px; }
+      .kicker { margin: 0; color: var(--accent); font-size: 0.7rem; letter-spacing: 0.2em; text-transform: uppercase; }
+      h1 { margin: 0.4rem 0 0.8rem; font-family: Georgia, serif; font-size: 2.4rem; font-weight: 400; letter-spacing: -0.02em; }
+      h2 { margin: 0 0 0.5rem; font-family: Georgia, serif; font-size: 1.4rem; font-weight: 400; }
+      p { color: var(--dim); }
+      .card { margin-top: 1.6rem; padding: 1.2rem; border: 1px solid var(--line); background: var(--panel); }
+      .row { display: flex; gap: 0.7rem; flex-wrap: wrap; align-items: center; }
+      label.field { display: grid; gap: 0.3rem; margin-top: 0.9rem; color: var(--dim); font-size: 0.78rem; }
+      input[type="text"], textarea {
+        width: 100%;
+        padding: 0.65rem 0.75rem;
+        border: 1px solid var(--line-2);
+        background: var(--panel-2);
+        color: var(--fg);
+        font: inherit;
+      }
+      textarea { min-height: 12rem; resize: vertical; font-size: 0.76rem; }
+      input[type="text"]:focus, textarea:focus { border-color: var(--accent-dim); outline: 2px solid rgba(154, 230, 180, 0.15); }
+      button {
+        padding: 0.6rem 0.95rem;
+        border: 0;
+        background: var(--accent);
+        color: #07130c;
+        font: inherit;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      button.secondary { border: 1px solid var(--line-2); background: transparent; color: var(--fg); font-weight: 400; }
+      button:hover { filter: brightness(1.08); }
+      .status { margin-top: 1rem; padding: 0.8rem 1rem; border: 1px solid var(--line-2); color: var(--dim); font-size: 0.82rem; }
+      .status.good { border-color: var(--accent-dim); color: var(--accent); }
+      .status.bad { border-color: #7a3b45; color: #f0b8c0; }
+      .switch { display: flex; align-items: center; gap: 0.7rem; }
+      .switch input { width: 1.1rem; height: 1.1rem; accent-color: var(--accent); }
+      .badge { padding: 0.1rem 0.45rem; border: 1px solid var(--line-2); font-size: 0.7rem; color: var(--dim); }
+      ul.sites { margin: 1rem 0 0; padding: 0; list-style: none; }
+      ul.sites li { display: flex; justify-content: space-between; gap: 1rem; padding: 0.5rem 0; border-bottom: 1px solid var(--line); font-size: 0.8rem; }
+      ul.sites code { color: var(--faint); font-size: 0.66rem; word-break: break-all; }
+      .errors { margin: 0.8rem 0 0; padding-left: 1.2rem; color: #f0b8c0; font-size: 0.8rem; }
+      .hint { color: var(--faint); font-size: 0.76rem; }
+      footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); color: var(--faint); font-size: 0.74rem; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="kicker">OpenWeb Mode</p>
+      <h1>The gate.</h1>
+      <p>
+        You cannot delete the rest of the internet, but you can stop this browser
+        from seeing it. When the mode is on, only the local gateway and sites in a
+        signed directory you loaded can open. There is no allow-once button.
+      </p>
+
+      <section class="card">
+        <div class="row" style="justify-content: space-between">
+          <div class="switch">
+            <input id="enabled" type="checkbox" />
+            <label for="enabled"><strong>OpenWeb mode</strong></label>
+          </div>
+          <span id="badge" class="badge">off</span>
+        </div>
+        <div class="row" style="margin-top: 1rem">
+          <label for="strict" class="switch" style="font-size: 0.8rem; color: var(--dim)">
+            <input id="strict" type="checkbox" />
+            require every address to be in the signed directory
+          </label>
+        </div>
+        <div class="status" id="gate-status">Checking the local gateway…</div>
+      </section>
+
+      <section class="card">
+        <h2>Gateway</h2>
+        <p class="hint">The local process that bridges normal HTTP and the peer-to-peer web.</p>
+        <label class="field">Gateway URL
+          <input id="gateway" type="text" spellcheck="false" placeholder="http://127.0.0.1:8080" />
+        </label>
+        <div class="row" style="margin-top: 0.8rem">
+          <button id="save-gateway" class="secondary">save gateway</button>
+          <a href="http://127.0.0.1:8080/" target="_blank" rel="noreferrer">open gateway ↗</a>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Signed directory</h2>
+        <p class="hint">
+          Paste the JSON produced by <code>openweb directory verify</code>, or load
+          the local directory straight from the gateway. Every signature is checked
+          here with WebCrypto; the gateway is not trusted.
+        </p>
+        <div class="row">
+          <button id="load-gateway">load from gateway</button>
+          <label class="secondary" style="display: inline-flex">
+            <input id="file" type="file" accept="application/json,.json" hidden />
+            <button id="pick-file" class="secondary" type="button">choose a file…</button>
+          </label>
+          <button id="clear" class="secondary">clear</button>
+        </div>
+        <label class="field">Directory JSON
+          <textarea id="directory" spellcheck="false" placeholder='{ "payload": { … }, "signature": "…" }'></textarea>
+        </label>
+        <div class="row" style="margin-top: 0.8rem">
+          <button id="verify">verify &amp; save</button>
+          <span id="verify-status" class="status" style="margin: 0; flex: 1">No directory loaded.</span>
+        </div>
+        <div id="verification"></div>
+      </section>
+
+      <footer>
+        <strong>OpenWeb Mode</strong> — signatures are verified offline; blocked
+        navigations are redirected to a local page. The mode never sends your
+        browsing to a third party.
+      </footer>
+    </main>
+    <script src="options.js"></script>
+  </body>
+</html>

@@ -14,6 +14,28 @@
 
 import { readFileSync, writeFileSync } from 'node:fs'
 import { analyze, type Token } from './extract.js'
+import {
+  expandGroups,
+  parseQuery,
+  rankSuggestions,
+  type Clause,
+  type TermLookup,
+  type TermSuggestion,
+} from './query.js'
+
+export { parseQuery } from './query.js'
+export type { Clause } from './query.js'
+
+import {
+  B,
+  K1,
+  PHRASE_BOOST,
+  TITLE_BOOST,
+  TopScores,
+  hasPhrase,
+  makeSnippet,
+  scoreTerm,
+} from './ranking.js'
 
 export interface Document {
   address: string
@@ -48,11 +70,6 @@ export interface SearchResponse {
   total: number
   matchedTerms: string[]
 }
-
-const K1 = 1.2
-const B = 0.75
-const TITLE_BOOST = 2.2
-const PHRASE_BOOST = 1.4
 
 export function buildIndex(documents: Document[]): IndexFile {
   const postings: Record<string, Posting[]> = {}
@@ -104,78 +121,7 @@ export function buildIndex(documents: Document[]): IndexFile {
 }
 
 // ---------------------------------------------------------------------------
-// Query parsing
-// ---------------------------------------------------------------------------
-
-interface Clause {
-  terms: string[]
-  phrase: boolean
-  negated: boolean
-  titleOnly: boolean
-}
-
-export function parseQuery(input: string): Clause[][] {
-  const groups: Clause[][] = [[]]
-
-  for (const piece of splitClauses(input)) {
-    if (piece.toUpperCase() === 'OR') {
-      if (groups[groups.length - 1]?.length) groups.push([])
-      continue
-    }
-
-    let raw = piece
-    if (raw.startsWith('+')) raw = raw.slice(1)
-    const negated = raw.startsWith('-')
-    if (negated) raw = raw.slice(1)
-
-    let titleOnly = false
-    if (/^title:/i.test(raw)) {
-      titleOnly = true
-      raw = raw.slice(6)
-    }
-
-    const phrase = raw.startsWith('"') && raw.endsWith('"') && raw.length >= 2
-    const body = phrase ? raw.slice(1, -1) : raw
-
-    const terms = analyze(body).map((token) => token.term)
-    if (terms.length === 0) continue
-
-    groups[groups.length - 1]?.push({
-      terms,
-      phrase: phrase && terms.length > 1,
-      negated,
-      titleOnly,
-    })
-  }
-
-  return groups.filter((group) => group.length > 0)
-}
-
-/** Splits on whitespace but keeps quoted strings together. */
-function splitClauses(input: string): string[] {
-  const pieces: string[] = []
-  let current = ''
-  let quoted = false
-
-  for (const char of input.trim()) {
-    if (char === '"') {
-      quoted = !quoted
-      current += char
-    } else if (!quoted && /\s/.test(char)) {
-      if (current !== '') {
-        pieces.push(current)
-        current = ''
-      }
-    } else {
-      current += char
-    }
-  }
-  if (current !== '') pieces.push(current)
-  return pieces
-}
-
-// ---------------------------------------------------------------------------
-// Execution
+// Query parsing lives in query.ts; expansion is applied below.
 // ---------------------------------------------------------------------------
 
 export function queryIndex(index: IndexFile, query: string, limit = 10): SearchResult[] {
@@ -183,10 +129,12 @@ export function queryIndex(index: IndexFile, query: string, limit = 10): SearchR
 }
 
 export function search(index: IndexFile, query: string, limit = 10): SearchResponse {
-  const groups = parseQuery(query)
-  if (groups.length === 0 || index.documents.length === 0) {
+  const parsed = parseQuery(query)
+  if (parsed.length === 0 || index.documents.length === 0) {
     return { results: [], total: 0, matchedTerms: [] }
   }
+
+  const groups = expandGroups(parsed, memoryLookup(index))
 
   const top = new TopScores(limit)
   const matchedTerms = new Set<string>()
@@ -241,7 +189,10 @@ export function search(index: IndexFile, query: string, limit = 10): SearchRespo
 function collectTerms(group: Clause[], into: Set<string>): void {
   for (const clause of group) {
     if (clause.negated) continue
-    for (const term of clause.terms) into.add(term)
+    for (let i = 0; i < clause.terms.length; i++) {
+      const alternatives = clause.alternatives?.[i] ?? [clause.terms[i]!]
+      for (const term of alternatives) into.add(term)
+    }
   }
 }
 
@@ -260,15 +211,24 @@ interface TermCursor {
   titleAt: number
 }
 
+interface AlternativeCursor {
+  cursor: TermCursor
+  weight: number
+}
+
+interface TokenPlan {
+  alternatives: AlternativeCursor[]
+}
+
 interface ClauseCursor {
   clause: Clause
-  terms: TermCursor[]
+  tokens: TokenPlan[]
 }
 
 /**
- * Walks the rarest positive term's postings once and reports every document
- * that satisfies all clauses. There are no intermediate result arrays: the
- * caller decides whether to keep a top-K heap or merge OR branches.
+ * Walks the rarest positive token's alternatives once and reports every
+ * document that satisfies all clauses. There are no intermediate result
+ * arrays: the caller decides whether to keep a top-K heap or merge OR branches.
  */
 function executeGroup(
   index: IndexFile,
@@ -292,13 +252,12 @@ function executeGroup(
     return
   }
 
-  // Drive the scan from the rarest term across all positive clauses. Every
-  // other cursor advances monotonically against the same document ids.
-  const driver = rarestTerm(positivePlans)
+  // Drive the scan from the rarest token (counting all of its alternatives).
+  // Every other cursor advances monotonically against the same document ids.
+  const driver = rarestToken(positivePlans)
   if (!driver) return
 
-  for (const posting of driver.list) {
-    const doc = posting[0]
+  for (const doc of unionDocuments(driver)) {
     let score = 0
     let ok = true
 
@@ -352,35 +311,88 @@ function prepareClause(
   clause: Clause,
   titles: Record<string, number[]>,
 ): ClauseCursor | null {
-  const terms: TermCursor[] = []
+  const tokens: TokenPlan[] = []
   const total = index.documents.length
 
-  for (const term of clause.terms) {
-    const list = index.postings[term]
-    if (!list || list.length === 0) return null
+  for (let i = 0; i < clause.terms.length; i++) {
+    // Phrases stay exact; they are about adjacency, not similarity.
+    const candidates = clause.phrase
+      ? [clause.terms[i]!]
+      : (clause.alternatives?.[i] ?? [clause.terms[i]!])
+    const weights = clause.phrase ? [1] : (clause.weights?.[i] ?? candidates.map(() => 1))
+    const alternatives: AlternativeCursor[] = []
 
-    const df = list.length
-    terms.push({
-      term,
-      list,
-      at: 0,
-      idf: Math.log(1 + (total - df + 0.5) / (df + 0.5)),
-      titleList: titles[term] ?? null,
-      titleAt: 0,
-    })
+    for (let j = 0; j < candidates.length; j++) {
+      const term = candidates[j]!
+      const list = index.postings[term]
+      if (!list || list.length === 0) continue
+
+      const df = list.length
+      alternatives.push({
+        cursor: {
+          term,
+          list,
+          at: 0,
+          idf: Math.log(1 + (total - df + 0.5) / (df + 0.5)),
+          titleList: titles[term] ?? null,
+          titleAt: 0,
+        },
+        weight: weights[j] ?? 1,
+      })
+    }
+
+    if (alternatives.length === 0) return null
+    tokens.push({ alternatives })
   }
 
-  return { clause, terms }
+  return { clause, tokens }
 }
 
-function rarestTerm(plans: ClauseCursor[]): TermCursor | null {
-  let best: TermCursor | null = null
+function rarestToken(plans: ClauseCursor[]): TokenPlan | null {
+  let best: TokenPlan | null = null
+  let bestLength = Infinity
+
   for (const plan of plans) {
-    for (const term of plan.terms) {
-      if (!best || term.list.length < best.list.length) best = term
+    for (const token of plan.tokens) {
+      let length = 0
+      for (const alternative of token.alternatives) length += alternative.cursor.list.length
+      if (length < bestLength) {
+        bestLength = length
+        best = token
+      }
     }
   }
   return best
+}
+
+/**
+ * Merge the sorted posting lists of one token's alternatives. Documents that
+ * match any synonym or fuzzy candidate become candidates; duplicates are
+ * yielded once.
+ */
+function* unionDocuments(token: TokenPlan): Generator<number> {
+  const lists = token.alternatives.map((alternative) => alternative.cursor.list)
+  const at = lists.map(() => 0)
+  let previous = -1
+
+  for (;;) {
+    let next = Infinity
+    for (let i = 0; i < lists.length; i++) {
+      const posting = lists[i]![at[i]!]
+      if (posting && posting[0] < next) next = posting[0]
+    }
+    if (next === Infinity) return
+
+    for (let i = 0; i < lists.length; i++) {
+      const posting = lists[i]![at[i]!]
+      if (posting && posting[0] === next) at[i]!++
+    }
+
+    if (next !== previous) {
+      yield next
+      previous = next
+    }
+  }
 }
 
 /** Advances a cursor to `doc`. Lists are sorted, and docs arrive in order. */
@@ -393,25 +405,43 @@ function postingAt(cursor: TermCursor, doc: number): Posting | null {
 
 /** Score for one clause at one document, or null when the clause misses. */
 function scoreClause(norms: Float64Array, plan: ClauseCursor, doc: number): number | null {
-  const { clause, terms } = plan
+  const { clause, tokens } = plan
+  const norm = norms[doc] ?? K1
 
-  if (clause.titleOnly && !allTitleTerms(plan, doc)) return null
+  if (clause.phrase) {
+    const positions: number[][] = []
+    let score = 0
 
-  const phrase = clause.phrase
-  const positions: number[][] | null = phrase ? [] : null
-  let score = 0
+    for (const token of tokens) {
+      const cursor = token.alternatives[0]!.cursor
+      if (clause.titleOnly && !titleAt(cursor, doc)) return null
+      const posting = postingAt(cursor, doc)
+      if (!posting) return null
+      positions.push(posting[2])
+      score += scoreTerm(posting[1], cursor.idf, norm, titleAt(cursor, doc))
+    }
 
-  for (const cursor of terms) {
-    const posting = postingAt(cursor, doc)
-    if (!posting) return null
-
-    if (positions) positions.push(posting[2])
-    score += scoreTerm(posting[1], cursor.idf, norms[doc] ?? K1, titleAt(cursor, doc))
+    if (!hasPhrase(positions)) return null
+    return score * PHRASE_BOOST
   }
 
-  if (positions) {
-    if (!hasPhrase(positions)) return null
-    score *= PHRASE_BOOST
+  let score = 0
+  for (const token of tokens) {
+    let best: number | null = null
+
+    for (const alternative of token.alternatives) {
+      const cursor = alternative.cursor
+      if (clause.titleOnly && !titleAt(cursor, doc)) continue
+      const posting = postingAt(cursor, doc)
+      if (!posting) continue
+
+      const value =
+        scoreTerm(posting[1], cursor.idf, norm, titleAt(cursor, doc)) * alternative.weight
+      if (best === null || value > best) best = value
+    }
+
+    if (best === null) return null
+    score += best
   }
 
   return score
@@ -432,11 +462,58 @@ function titleAt(cursor: TermCursor, doc: number): boolean {
   return list[cursor.titleAt] === doc
 }
 
-function allTitleTerms(plan: ClauseCursor, doc: number): boolean {
-  for (const cursor of plan.terms) {
-    if (!titleAt(cursor, doc)) return false
+/** Vocabulary in sorted order, built once per in-memory index. */
+const TERM_CACHE = new WeakMap<IndexFile, string[]>()
+
+function indexTerms(index: IndexFile): string[] {
+  const cached = TERM_CACHE.get(index)
+  if (cached) return cached
+  const terms = Object.keys(index.postings).sort()
+  TERM_CACHE.set(index, terms)
+  return terms
+}
+
+/** Adapter that lets the shared query expander see an in-memory index. */
+function memoryLookup(index: IndexFile): TermLookup {
+  const terms = indexTerms(index)
+  return {
+    has(term: string): boolean {
+      return (index.postings[term]?.length ?? 0) > 0
+    },
+    df(term: string): number {
+      return index.postings[term]?.length ?? 0
+    },
+    suggest(term: string, limit: number): TermSuggestion[] {
+      const prefixes = term.length > 2 ? [term.slice(0, 2), term.slice(0, 1)] : [term.slice(0, 1)]
+      const seen = new Set<string>()
+      const candidates: Array<{ term: string; df: number }> = []
+
+      for (const prefix of prefixes) {
+        const start = lowerBound(terms, prefix)
+        for (let i = start; i < terms.length; i++) {
+          const candidate = terms[i]!
+          if (!candidate.startsWith(prefix)) break
+          if (seen.has(candidate)) continue
+          seen.add(candidate)
+          candidates.push({ term: candidate, df: index.postings[candidate]?.length ?? 0 })
+        }
+        if (candidates.length >= limit * 4) break
+      }
+
+      return rankSuggestions(candidates, term, limit)
+    },
   }
-  return true
+}
+
+function lowerBound(sorted: string[], value: string): number {
+  let low = 0
+  let high = sorted.length
+  while (low < high) {
+    const middle = (low + high) >> 1
+    if (sorted[middle]! < value) low = middle + 1
+    else high = middle
+  }
+  return low
 }
 
 /**
@@ -481,143 +558,9 @@ function lengthNorms(index: IndexFile): Float64Array {
   return norms
 }
 
-function scoreTerm(tf: number, idf: number, norm: number, inTitle: boolean): number {
-  const effectiveTf = tf > 0 ? tf : 0.5
-  const weight = (effectiveTf * (K1 + 1)) / (effectiveTf + norm || 1)
-  return idf * weight * (inTitle ? TITLE_BOOST : 1)
-}
-
-/**
- * Keeps the best `limit` scores in a binary min-heap of parallel arrays. The
- * root is the worst kept result, so a new score usually costs one comparison.
- * Parallel arrays matter: a tuple per candidate would allocate on every match.
- */
-class TopScores {
-  private readonly docs: number[] = []
-  private readonly scores: number[] = []
-  private readonly limit: number
-
-  constructor(limit: number) {
-    this.limit = Math.max(0, limit)
-  }
-
-  add(doc: number, score: number): void {
-    if (this.limit === 0) return
-
-    if (this.docs.length < this.limit) {
-      this.docs.push(doc)
-      this.scores.push(score)
-      this.siftUp(this.docs.length - 1)
-      return
-    }
-
-    if (worse(score, doc, this.scores[0]!, this.docs[0]!)) {
-      this.docs[0] = doc
-      this.scores[0] = score
-      this.siftDown(0)
-    }
-  }
-
-  values(): Array<[number, number]> {
-    return this.docs.map((doc, index) => [doc, this.scores[index]!])
-  }
-
-  private siftUp(start: number): void {
-    let child = start
-    while (child > 0) {
-      const parent = (child - 1) >> 1
-      if (!worse(this.scores[child]!, this.docs[child]!, this.scores[parent]!, this.docs[parent]!)) {
-        break
-      }
-      this.swap(child, parent)
-      child = parent
-    }
-  }
-
-  private siftDown(start: number): void {
-    let parent = start
-    for (;;) {
-      const left = parent * 2 + 1
-      const right = left + 1
-      let worst = parent
-
-      if (
-        left < this.docs.length &&
-        worse(this.scores[left]!, this.docs[left]!, this.scores[worst]!, this.docs[worst]!)
-      ) {
-        worst = left
-      }
-      if (
-        right < this.docs.length &&
-        worse(this.scores[right]!, this.docs[right]!, this.scores[worst]!, this.docs[worst]!)
-      ) {
-        worst = right
-      }
-      if (worst === parent) return
-
-      this.swap(parent, worst)
-      parent = worst
-    }
-  }
-
-  private swap(a: number, b: number): void {
-    const doc = this.docs[a]!
-    const score = this.scores[a]!
-    this.docs[a] = this.docs[b]!
-    this.scores[a] = this.scores[b]!
-    this.docs[b] = doc
-    this.scores[b] = score
-  }
-}
-
-function worse(
-  scoreA: number,
-  docA: number,
-  scoreB: number,
-  docB: number,
-): boolean {
-  if (scoreA !== scoreB) return scoreA < scoreB
-  return docA > docB
-}
-
-function hasPhrase(positions: number[][]): boolean {
-  const first = positions[0]
-  if (!first || first.length === 0) return false
-
-  for (const start of first) {
-    let matched = true
-    for (let i = 1; i < positions.length; i++) {
-      if (!positions[i]?.includes(start + i)) {
-        matched = false
-        break
-      }
-    }
-    if (matched) return true
-  }
-  return false
-}
-
 // ---------------------------------------------------------------------------
-// Snippets and storage
+// Storage
 // ---------------------------------------------------------------------------
-
-function makeSnippet(text: string, query: string, length = 180): string {
-  const lower = text.toLowerCase()
-  const words = query
-    .toLowerCase()
-    .match(/[a-z0-9]+/g)
-    ?.filter((word) => word.length > 2) ?? []
-
-  let at = -1
-  for (const word of words) {
-    const found = lower.indexOf(word)
-    if (found !== -1 && (at === -1 || found < at)) at = found
-  }
-
-  const start = Math.max(0, (at === -1 ? 0 : at) - 60)
-  const piece = text.slice(start, start + length)
-  return `${start > 0 ? '…' : ''}${piece}${start + length < text.length ? '…' : ''}`
-}
 
 export function saveIndex(index: IndexFile, file: string): void {
   writeFileSync(file, JSON.stringify(index))

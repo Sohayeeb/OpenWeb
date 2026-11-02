@@ -106,10 +106,10 @@
         <table>
           <tbody>
             <tr><td>Coverage</td><td>Seeds you choose, plus the links those pages contain.</td></tr>
-            <tr><td>Uptime</td><td>The author's machine. Sleep it and the site sleeps.</td></tr>
+            <tr><td>Uptime</td><td>The author's machine, or any peer that pins a full replica.</td></tr>
             <tr><td>JavaScript</td><td>None in v1. Static pages only, by design.</td></tr>
-            <tr><td>Ranking</td><td>BM25 over words. No synonyms, no fuzzy matching, no personalization.</td></tr>
-            <tr><td>Search index</td><td>One local JSON file. Roughly 3.4 KB per page at 20,000 pages.</td></tr>
+            <tr><td>Ranking</td><td>BM25 over words, with title and phrase boosts. Small synonym and fuzzy-match fallbacks; no personalization.</td></tr>
+            <tr><td>Search index</td><td>One local SQLite file. About 7.5 KB per page at 20,000 pages, with RAM that does not grow with the corpus.</td></tr>
             <tr><td>Names</td><td>Petnames live in signed directory entries, never in the protocol.</td></tr>
           </tbody>
         </table>

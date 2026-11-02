@@ -5,7 +5,7 @@
   "type": "module",
   "description": "A peer-to-peer web with no ads, no trackers, and no AI slop.",
   "engines": {
-    "node": ">=22"
+    "node": ">=24"
   },
   "workspaces": [
     "packages/*"
@@ -14,10 +14,11 @@
     "build": "tsc -b",
     "clean": "tsc -b --clean",
     "typecheck": "tsc -b --pretty false",
-    "test": "npm run build && node --test packages/index/dist/engine.test.js",
+    "test": "npm run build && node --test packages/index/dist/engine.test.js packages/index/dist/sqlite.test.js packages/core/dist/directory.test.js packages/builder/dist/builder.test.js",
     "bench": "npm run build && node packages/cli/dist/index.js bench",
     "e2e": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/e2e.ps1",
-    "e2e:search": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/search-e2e.ps1"
+    "e2e:search": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/search-e2e.ps1",
+    "e2e:features": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/features-e2e.ps1"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

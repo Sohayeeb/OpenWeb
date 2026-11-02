@@ -4,174 +4,68 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="openweb:browser" content="on" />
-    <title>OpenWeb — the browser is the internet</title>
+    <title>OpenWeb — a small web, served by its writers</title>
     <meta
       name="description"
       content="A peer-to-peer web. Every page is a file on a real computer, published under a key. No ads, no trackers, no AI, no hosting bill."
     />
     <link rel="stylesheet" href="/style.css" />
   </head>
-  <body>
-    <header class="site-head">
-      <div class="wrap">
+  <body class="newtab">
+    <div class="nt-shell">
+      <header class="nt-bar">
         <a class="brand" href="/">Open<span>Web</span></a>
-        <nav class="site-nav" aria-label="Site">
-          <a href="/" aria-current="page">home</a>
+
+        <details class="launcher">
+          <summary aria-label="Apps" title="Apps">
+            <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+          </summary>
+          <nav class="launcher-panel" aria-label="OpenWeb apps">
+            <a href="/"><span class="glyph">⌂</span>new tab</a>
+            <a href="/directory.html"><span class="glyph">✓</span>directory</a>
+            <a href="/search.html"><span class="glyph">⌕</span>search</a>
+            <a href="/publish.html"><span class="glyph">↑</span>publish</a>
+            <a href="/builder.html"><span class="glyph">✎</span>builder</a>
+            <a href="/about.html"><span class="glyph">i</span>about</a>
+            <a href="/garden.html"><span class="glyph">❧</span>garden</a>
+            <a href="/coffee.html"><span class="glyph">◔</span>coffee</a>
+            <a href="/hello.html"><span class="glyph">✉</span>hello</a>
+          </nav>
+        </details>
+      </header>
+
+      <main class="nt-main">
+        <a class="nt-mark" href="/">Open<span>Web</span></a>
+        <p class="nt-tagline">a small web, served by the people who write it</p>
+
+        <form class="nt-search" action="/search" method="get" role="search">
+          <input
+            type="search"
+            name="q"
+            placeholder="search the pages this machine has read"
+            aria-label="Search OpenWeb"
+            autocomplete="off"
+            autofocus
+          />
+          <button type="submit">search</button>
+        </form>
+
+        <p class="nt-hint">
+          no query leaves this machine · no ads · no trackers · no AI
+        </p>
+
+        <nav class="nt-shortcuts" aria-label="Shortcuts">
           <a href="/directory.html">directory</a>
-          <a href="/search.html">search</a>
           <a href="/publish.html">publish</a>
+          <a href="/builder.html">builder</a>
           <a href="/about.html">about</a>
         </nav>
-      </div>
-    </header>
+      </main>
 
-    <main class="wrap">
-      <p class="eyebrow">One site. One address. No middle.</p>
-      <h1 class="display">The browser is the internet.</h1>
-      <p class="lede">
-        OpenWeb is a small, peer-to-peer web. Every page here is a file on a real
-        computer, signed with a key and served to you by its owner. There is no
-        platform in the middle, no account to create, and no bill at the end of
-        the month.
-      </p>
-
-      <form class="searchbar" action="/search" method="get" role="search">
-        <input
-          type="search"
-          name="q"
-          placeholder="search the pages this machine has read…"
-          aria-label="Search OpenWeb"
-          autocomplete="off"
-        />
-        <button type="submit">search</button>
-      </form>
-      <p class="hint">
-        The index lives on this computer. No query leaves it, and nothing here is
-        ranked by clicks.
-      </p>
-
-      <div class="rules" aria-label="What OpenWeb refuses">
-        <div><strong>No ads</strong><span>nothing to sell you</span></div>
-        <div><strong>No trackers</strong><span>nothing to remember you</span></div>
-        <div><strong>No AI</strong><span>written by a person</span></div>
-        <div><strong>No bill</strong><span>your PC is the host</span></div>
-      </div>
-
-      <section class="section">
-        <p class="eyebrow">Start here</p>
-        <h2>Four doors into the same small web.</h2>
-        <div class="grid">
-          <a class="card" href="/directory.html">
-            <span class="kicker">Directory</span>
-            <h3>Everything in this site</h3>
-            <p>
-              A hand-kept list of the pages here, plus how to find other people's
-              sites by address.
-            </p>
-            <span class="arrow">open the directory →</span>
-          </a>
-          <a class="card" href="/search.html">
-            <span class="kicker">Search</span>
-            <h3>A search engine you own</h3>
-            <p>
-              A crawler and a JSON file on your disk. Query it from this page or
-              from the command line.
-            </p>
-            <span class="arrow">search the index →</span>
-          </a>
-          <a class="card" href="/publish.html">
-            <span class="kicker">Publish</span>
-            <h3>Put a page online</h3>
-            <p>
-              Write HTML, run one command, and share a key. No sign-up, no deploy
-              button, no host.
-            </p>
-            <span class="arrow">publish from your PC →</span>
-          </a>
-          <a class="card" href="/about.html">
-            <span class="kicker">About</span>
-            <h3>Why this exists</h3>
-            <p>
-              The rules, the trade-offs, and the parts that are deliberately
-              missing.
-            </p>
-            <span class="arrow">read the short version →</span>
-          </a>
-        </div>
-      </section>
-
-      <section class="section">
-        <p class="eyebrow">Inside this site</p>
-        <h2>Three ordinary pages, written by hand.</h2>
-        <p class="lede">
-          They are not demos of a framework. They are the kind of pages OpenWeb
-          was built to carry: small, specific, and finished.
-        </p>
-        <div class="grid">
-          <a class="card" href="/hello.html">
-            <span class="kicker">Note</span>
-            <h3>Hello from a laptop</h3>
-            <p>
-              What it feels like when two machines find each other through a DHT
-              and exchange signed blocks.
-            </p>
-            <span class="arrow">read the note →</span>
-          </a>
-          <a class="card" href="/garden.html">
-            <span class="kicker">Garden</span>
-            <h3>Tomatoes, grown badly</h3>
-            <p>
-              Compost, patience, and a watering can. A page with no growth hacks
-              in it.
-            </p>
-            <span class="arrow">visit the garden →</span>
-          </a>
-          <a class="card" href="/coffee.html">
-            <span class="kicker">Kitchen</span>
-            <h3>Coffee without a machine</h3>
-            <p>
-              A grinder, a kettle, and four minutes. The best cup is the one you
-              make without thinking.
-            </p>
-            <span class="arrow">make a cup →</span>
-          </a>
-        </div>
-      </section>
-
-      <hr class="rule" />
-
-      <section class="split">
-        <div>
-          <p class="eyebrow">How it works</p>
-          <h2>Six steps, and one of them is yours.</h2>
-          <p class="lede">
-            There is no DNS, no certificate authority, and no port to open. An
-            address is a public key. The key is the site. If the key is valid,
-            the page is the page its author signed.
-          </p>
-        </div>
-        <ol class="steps">
-          <li><strong>Write a folder.</strong> HTML, CSS, images. Static files only.</li>
-          <li><strong>Run one command.</strong> <code>openweb serve ./my-site</code>.</li>
-          <li><strong>Get an address.</strong> <code>ow1…</code>, derived from your key.</li>
-          <li><strong>Share the key.</strong> Anyone can resolve it. No registry.</li>
-          <li><strong>Find peers.</strong> The DHT introduces you; signed blocks move.</li>
-          <li><strong>Stay online.</strong> Your laptop is the server. Uptime is you.</li>
-        </ol>
-      </section>
-
-      <blockquote>
-        The web was supposed to be a place you visited, not a feed you were
-        placed into. This is a small attempt to give that back.
-        <footer>OpenWeb — draft 0.1</footer>
-      </blockquote>
-    </main>
-
-    <footer class="site-foot">
-      <div class="wrap">
-        <p><strong>OpenWeb</strong> — a web owned by the people who write it.</p>
-        <p class="tiny">Signed by a key. Served by a peer. No cookies, no scripts, no analytics.</p>
-      </div>
-    </footer>
+      <footer class="nt-foot">
+        <span>signed by a key · served by a peer</span>
+        <span class="tiny">draft 0.2</span>
+      </footer>
+    </div>
   </body>
 </html>

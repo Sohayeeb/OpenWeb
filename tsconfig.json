@@ -2,6 +2,7 @@
   "files": [],
   "references": [
     { "path": "packages/core" },
+    { "path": "packages/builder" },
     { "path": "packages/index" },
     { "path": "packages/node" },
     { "path": "packages/gateway" },

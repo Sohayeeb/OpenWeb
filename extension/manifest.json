@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "OpenWeb Mode",
-  "version": "0.0.1",
-  "description": "Allow only human-reviewed OpenWeb sites. Block everything else.",
-  "permissions": ["declarativeNetRequest", "storage"],
+  "version": "0.1.0",
+  "description": "Allow only the local gateway and sites in a signed directory. Block everything else.",
+  "permissions": ["declarativeNetRequest", "storage", "tabs"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js",
@@ -11,5 +11,12 @@
   },
   "action": {
     "default_title": "OpenWeb mode"
-  }
+  },
+  "options_page": "options.html",
+  "web_accessible_resources": [
+    {
+      "resources": ["blocked.html", "blocked.js"],
+      "matches": ["<all_urls>"]
+    }
+  ]
 }

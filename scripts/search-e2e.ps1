@@ -65,6 +65,16 @@ try {
   $coffee | Out-Host
   if ($coffee -notmatch 'Coffee, one cup') { throw 'coffee page not indexed' }
 
+  Write-Host '--- search: tomatoe (fuzzy/stem, expect garden) ---'
+  $fuzzy = (node packages/cli/dist/index.js search tomatoe --dir .test-search/gw) -join "`n"
+  $fuzzy | Out-Host
+  if ($fuzzy -notmatch 'Tomatoes') { throw 'misspelled tomato did not reach the garden' }
+
+  Write-Host '--- search: yard (synonym, expect garden) ---'
+  $synonym = (node packages/cli/dist/index.js search yard --dir .test-search/gw) -join "`n"
+  $synonym | Out-Host
+  if ($synonym -notmatch 'Tomatoes') { throw 'synonym yard did not reach the garden' }
+
   Write-Host '--- search: nothing (expect empty) ---'
   $none = (node packages/cli/dist/index.js search xylophone --dir .test-search/gw) -join "`n"
   if ($none -notmatch '0 result') { throw 'expected no results' }
@@ -74,7 +84,7 @@ try {
   Write-Host '--- gateway /search?q=coffee ---'
   $page = (curl.exe -s --max-time 30 'http://127.0.0.1:8080/search?q=coffee') -join "`n"
   if ($page -notmatch 'Coffee, one cup') { throw 'search page did not render the coffee result' }
-  if ($page -notmatch 'no personalization') { throw 'search page lost its principles' }
+  if ($page -notmatch 'SQLite file') { throw 'search page lost its local-index note' }
   Write-Host 'ok'
 
   Write-Host ''

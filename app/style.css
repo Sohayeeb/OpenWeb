@@ -506,3 +506,231 @@ td:first-child {
     width: 100%;
   }
 }
+
+/* ------------------------------------------------------------ new tab page */
+
+.newtab {
+  background:
+    radial-gradient(48rem 26rem at 50% -8%, #16241b 0%, transparent 62%),
+    var(--bg);
+}
+
+.nt-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.nt-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 1.2rem;
+}
+
+.nt-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem 1.2rem 4rem;
+  text-align: center;
+}
+
+.nt-mark {
+  margin: 0;
+  color: var(--fg);
+  font-family: var(--serif);
+  font-size: clamp(2.8rem, 9vw, 5.4rem);
+  font-weight: 400;
+  letter-spacing: -0.045em;
+  line-height: 1;
+}
+
+.nt-mark span {
+  color: var(--accent);
+}
+
+.nt-mark:hover {
+  text-decoration: none;
+}
+
+.nt-tagline {
+  margin: 0.8rem 0 2.2rem;
+  color: var(--faint);
+  font-size: 0.74rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.nt-search {
+  display: flex;
+  align-items: center;
+  width: min(44rem, 100%);
+  margin: 0;
+  padding: 0.34rem 0.34rem 0.34rem 1.15rem;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  background: var(--panel);
+}
+
+.nt-search:focus-within {
+  border-color: var(--accent-dim);
+  box-shadow: 0 0 0 3px rgba(154, 230, 180, 0.1);
+}
+
+.nt-search input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.72rem 0;
+  border: 0;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  outline: 0;
+}
+
+.nt-search button {
+  padding: 0.64rem 1.2rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #07130c;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.nt-search button:hover {
+  background: #b5f0c8;
+}
+
+.nt-hint {
+  margin: 1rem 0 0;
+  color: var(--faint);
+  font-size: 0.72rem;
+}
+
+.nt-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem 1.2rem;
+  margin-top: 2.6rem;
+  font-size: 0.78rem;
+}
+
+.nt-shortcuts a {
+  color: var(--dim);
+}
+
+.nt-shortcuts a:hover {
+  color: var(--fg);
+}
+
+.nt-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.2rem;
+  color: var(--faint);
+  font-size: 0.72rem;
+}
+
+/* --------------------------------------------------------------- launcher */
+
+.launcher {
+  position: relative;
+}
+
+.launcher summary {
+  display: grid;
+  grid-template-columns: repeat(3, 4px);
+  gap: 4px;
+  place-items: center;
+  padding: 0.5rem;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  list-style: none;
+}
+
+.launcher summary::-webkit-details-marker {
+  display: none;
+}
+
+.launcher summary:hover,
+.launcher[open] summary {
+  border-color: var(--line);
+  background: var(--panel-2);
+}
+
+.launcher summary i {
+  display: block;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--dim);
+}
+
+.launcher[open] summary i {
+  background: var(--accent);
+}
+
+.launcher-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.6rem);
+  display: grid;
+  grid-template-columns: repeat(3, 5.2rem);
+  gap: 0.35rem;
+  padding: 0.65rem;
+  border: 1px solid var(--line-2);
+  background: var(--panel);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+  z-index: 20;
+}
+
+.launcher-panel a {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  min-height: 4.2rem;
+  padding: 0.45rem 0.2rem;
+  border: 1px solid transparent;
+  color: var(--fg);
+  font-size: 0.66rem;
+  text-align: center;
+}
+
+.launcher-panel a:hover {
+  border-color: var(--line);
+  background: var(--panel-2);
+  text-decoration: none;
+}
+
+.launcher-panel .glyph {
+  display: grid;
+  place-items: center;
+  width: 1.45rem;
+  height: 1.45rem;
+  border: 1px solid var(--accent-dim);
+  border-radius: 2px;
+  color: var(--accent);
+  font-size: 0.7rem;
+}
+
+@media (max-width: 720px) {
+  .launcher-panel {
+    grid-template-columns: repeat(3, 4.5rem);
+  }
+
+  .nt-foot {
+    flex-direction: column;
+    align-items: center;
+  }
+}

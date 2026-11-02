@@ -6,4 +6,5 @@ dist/
 .test-openweb/
 .test-search/
 .test-start/
+.test-features/
 .DS_Store

@@ -1,2 +1,6 @@
+export * from './directory-store.js'
+export * from './index-share.js'
+export * from './pin.js'
 export * from './serve.js'
+export * from './shared-index.js'
 export * from './site.js'

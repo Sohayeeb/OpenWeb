@@ -51,7 +51,7 @@ try {
   Write-Host $css
   Write-Host ''
 
-  if ($html -notmatch 'The browser is the internet') { throw 'index.html did not arrive intact' }
+  if ($html -notmatch 'served by the people who write it') { throw 'index.html did not arrive intact' }
   if ($css -notmatch 'color-scheme') { throw 'style.css did not arrive' }
   if ($html -notmatch 'ow-browser') { throw 'the browser bar was not injected' }
   if ($html -notmatch "/$address/style.css") { throw 'root-relative CSS was not rewritten' }

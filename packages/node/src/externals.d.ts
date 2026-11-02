@@ -40,21 +40,41 @@ declare module 'corestore' {
 }
 
 declare module 'hyperdrive' {
+  export interface Download {
+    done(): Promise<void>
+    destroy(): void
+  }
+
+  export interface HyperdriveEntry {
+    key: string | Uint8Array
+    value: unknown
+  }
+
   export default class Hyperdrive {
     constructor(store: unknown, key?: Uint8Array)
     ready(): Promise<void>
     readonly key: Buffer
     readonly discoveryKey: Buffer
-    readonly core: { readonly length: number }
+    readonly core: {
+      readonly length: number
+      readonly contiguousLength?: number
+      on(event: string, listener: (...args: unknown[]) => void): unknown
+    }
+    readonly version: number
     get(path: string, options?: Record<string, unknown>): Promise<Buffer | null>
     update(options?: Record<string, unknown>): Promise<boolean>
     put(path: string, buffer: Uint8Array, options?: Record<string, unknown>): Promise<void>
     entry(path: string, options?: Record<string, unknown>): Promise<unknown | null>
     del(path: string): Promise<void>
-    list(folder?: string, options?: Record<string, unknown>): AsyncIterable<{
-      key: string | Uint8Array
-      value: unknown
-    }>
+    download(folder?: string, options?: Record<string, unknown>): Download
+    createReadStream(
+      path: string,
+      options?: Record<string, unknown>,
+    ): AsyncIterable<Uint8Array>
+    list(
+      folder?: string,
+      options?: Record<string, unknown>,
+    ): AsyncIterable<HyperdriveEntry>
     close(): Promise<void>
   }
 }

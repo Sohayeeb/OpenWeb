@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="openweb:browser" content="on" />
+    <title>Builder — OpenWeb</title>
+    <meta
+      name="description"
+      content="Make a static page without a framework. One form, one HTML file, no account."
+    />
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header class="site-head">
+      <div class="wrap">
+        <a class="brand" href="/">Open<span>Web</span></a>
+        <nav class="site-nav" aria-label="Site">
+          <a href="/">home</a>
+          <a href="/directory.html">directory</a>
+          <a href="/search.html">search</a>
+          <a href="/publish.html">publish</a>
+          <a href="/builder.html" aria-current="page">builder</a>
+          <a href="/about.html">about</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="wrap">
+      <p class="eyebrow">Builder</p>
+      <h1 class="display">One page. One file. No framework.</h1>
+      <p class="lede">
+        The builder turns a few fields into one self-contained HTML file. It has
+        no scripts, no external fonts, and nothing fetched from another server.
+        Save it in a folder, publish the folder, and the page is online while
+        your computer is.
+      </p>
+
+      <section class="section">
+        <p class="eyebrow">From the gateway</p>
+        <h2>Fill in the form, download the file.</h2>
+        <p class="lede">
+          The gateway runs the builder on the server, so a published page never
+          needs JavaScript to exist.
+        </p>
+        <form class="searchbar" action="/builder" method="post">
+          <input name="title" placeholder="Page title" aria-label="Page title" required />
+          <button type="submit">open the builder</button>
+        </form>
+        <p class="hint">
+          Or go straight to <a href="/builder">/builder</a> on this gateway.
+        </p>
+      </section>
+
+      <section class="section">
+        <p class="eyebrow">From the terminal</p>
+        <h2>The same output, one command.</h2>
+        <pre><code>openweb new my-site --title "My page" --tagline "A small thing I made"
+openweb serve my-site</code></pre>
+        <p class="lede">
+          The folder contains exactly one file, <code>index.html</code>. Edit it
+          by hand afterwards if you like; it is ordinary HTML and CSS.
+        </p>
+      </section>
+
+      <section class="section">
+        <p class="eyebrow">Rules the builder keeps</p>
+        <div class="rules">
+          <div><strong>Static</strong><span>no scripts in the output</span></div>
+          <div><strong>Self-contained</strong><span>styles inline, no CDN</span></div>
+          <div><strong>Escaped</strong><span>text cannot inject markup</span></div>
+          <div><strong>Yours</strong><span>a file, not an account</span></div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-foot">
+      <div class="wrap">
+        <p><strong>OpenWeb</strong> — a web owned by the people who write it.</p>
+        <p class="tiny">Signed by a key. Served by a peer. No cookies, no scripts, no analytics.</p>
+      </div>
+    </footer>
+  </body>
+</html>

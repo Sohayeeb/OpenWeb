@@ -10,7 +10,9 @@
     "build": "tsc -b"
   },
   "dependencies": {
+    "@openweb/builder": "*",
     "@openweb/core": "*",
-    "@openweb/index": "*"
+    "@openweb/index": "*",
+    "@openweb/node": "*"
   }
 }

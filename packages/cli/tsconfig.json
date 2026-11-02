@@ -7,6 +7,7 @@
   "include": ["src"],
   "references": [
     { "path": "../core" },
+    { "path": "../builder" },
     { "path": "../index" },
     { "path": "../node" },
     { "path": "../gateway" }

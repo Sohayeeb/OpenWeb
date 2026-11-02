@@ -30,7 +30,7 @@
       <h1 class="display">A search engine small enough to own.</h1>
       <p class="lede">
         There is no global index and no company behind this box. The gateway on
-        your machine answers from a JSON file built by a crawler you started.
+        your machine answers from a SQLite index built by a crawler you started.
         Coverage is the honest part: it is exactly what you seeded.
       </p>
 
@@ -67,7 +67,8 @@
         </table>
         <p class="hint">
           Words are Porter-stemmed, so <code>tomatoes</code> matches
-          <code>tomato</code>. Ranking is BM25 with a title boost. No
+          <code>tomato</code>. Misspellings and common synonyms are tried when an
+          exact word is missing. Ranking is BM25 with a title boost. No
           personalization, no click tracking, no ads.
         </p>
       </section>
@@ -90,8 +91,8 @@
 node packages/cli/dist/index.js search "slow garden" \
   --dir .openweb</code></pre>
           <p class="tiny">
-            The index is <code>.openweb/index.json</code>. Copy it, inspect it,
-            or delete it. It is yours.
+            The index is <code>.openweb/index.db</code>, one SQLite file. Copy it,
+            inspect it with any SQLite client, or delete it. It is yours.
           </p>
         </div>
       </section>
