@@ -1,0 +1,61 @@
+name: nightly
+
+# Every day at 06:00 UTC, build the newest commit on the nightly branch and
+# publish it as a GitHub prerelease. No approval: this is the canary channel.
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: nightly
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Stamp the nightly version
+        shell: pwsh
+        run: |
+          $stamp = Get-Date -Format "yyyyMMdd"
+          $version = "0.1.0-nightly.$stamp.${{ github.run_number }}"
+          npm version $version --no-git-tag-version --allow-same-version -w @openweb/desktop
+
+      - name: Test
+        run: npm test
+
+      - name: Build and publish the installer
+        env:
+          OPENWEB_CHANNEL: nightly
+          OPENWEB_PUBLISH: always
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: npm run package
+
+      - name: Upload the installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: openweb-nightly-${{ github.run_number }}
+          path: |
+            release/*.exe
+            release/nightly.yml
+            release/latest.yml
+          if-no-files-found: error
+          retention-days: 14

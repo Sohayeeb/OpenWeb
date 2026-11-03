@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:;"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OpenWeb</title>
+    <link rel="stylesheet" href="chrome.css" />
+  </head>
+  <body>
+    <header class="chrome">
+      <div class="tabbar">
+        <button class="brand" id="home" title="New tab">Open<span>Web</span></button>
+        <div class="tabs" id="tabs" aria-label="Tabs"></div>
+        <button class="new-tab" id="newTab" title="New tab (Ctrl+T)" aria-label="New tab">+</button>
+        <div class="drag"></div>
+        <div class="window-controls-space"></div>
+      </div>
+
+      <div class="toolbar">
+        <div class="nav">
+          <button class="icon" id="back" title="Back (Alt+Left)" disabled>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>
+          </button>
+          <button class="icon" id="forward" title="Forward (Alt+Right)" disabled>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18l6-6-6-6" /></svg>
+          </button>
+          <button class="icon" id="reload" title="Reload (Ctrl+R)">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M20 12a8 8 0 1 1-2.34-5.66" />
+              <path d="M20 4v5h-5" />
+            </svg>
+          </button>
+        </div>
+
+        <form class="address" id="addressForm" autocomplete="off">
+          <span class="address-icon" id="addressIcon" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="8.5" />
+              <path d="M3.5 12h17" />
+              <path d="M12 3.5c2.4 2.7 3.6 5.5 3.6 8.5s-1.2 5.8-3.6 8.5c-2.4-2.7-3.6-5.5-3.6-8.5S9.6 6.2 12 3.5z" />
+            </svg>
+          </span>
+          <input
+            id="address"
+            type="text"
+            placeholder="openweb:// address, ow1… key, or search"
+            aria-label="OpenWeb address"
+            spellcheck="false"
+            autocapitalize="off"
+          />
+          <button class="address-go" type="submit" title="Go" aria-label="Go">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M5 12h13" />
+              <path d="M13 6l6 6-6 6" />
+            </svg>
+          </button>
+        </form>
+
+        <button class="apps" id="apps" title="OpenWeb apps" aria-label="OpenWeb apps" aria-haspopup="true" aria-expanded="false">
+          <span class="dots" aria-hidden="true">
+            <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+          </span>
+        </button>
+      </div>
+    </header>
+
+    <main class="stage" id="stage">
+      <div class="startup">
+        <p class="mark">Open<span>Web</span></p>
+        <p class="status" id="status">starting your node…</p>
+        <div class="pulse" aria-hidden="true"><i></i><i></i><i></i></div>
+        <p class="hint">no terminal, no account, no localhost</p>
+      </div>
+    </main>
+
+    <script src="chrome.js"></script>
+  </body>
+</html>

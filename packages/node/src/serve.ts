@@ -27,6 +27,8 @@ export interface NodeOptions {
 export interface OpenWebNode {
   address: string
   previewUrl: string
+  /** The port the preview server actually bound to (useful when `port: 0`). */
+  port: number
   /** Files published on this run. */
   published: number
   /** Drive version after publishing, so a gateway can wait for this exact state. */
@@ -75,10 +77,13 @@ export async function startNode(options: NodeOptions = {}): Promise<OpenWebNode>
   })
 
   await listen(server, port)
+  const address = server.address()
+  const boundPort = typeof address === 'object' && address !== null ? address.port : port
 
   return {
     address: site.address,
-    previewUrl: `http://127.0.0.1:${port}/`,
+    previewUrl: `http://127.0.0.1:${boundPort}/`,
+    port: boundPort,
     published,
     version: (site.drive as unknown as { version: number }).version,
     async close() {

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:;"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OpenWeb apps</title>
+    <link rel="stylesheet" href="chrome.css" />
+    <link rel="stylesheet" href="launcher.css" />
+  </head>
+  <body class="overlay">
+    <div class="backdrop" id="backdrop" aria-hidden="true"></div>
+
+    <section class="launcher open" role="dialog" aria-label="OpenWeb apps">
+      <div class="launcher-head">
+        <span>OpenWeb apps</span>
+        <button id="refreshApps" type="button">refresh</button>
+      </div>
+      <div class="quick" id="quick"></div>
+      <div class="launcher-list" id="appsList"></div>
+    </section>
+
+    <script src="launcher.js"></script>
+  </body>
+</html>

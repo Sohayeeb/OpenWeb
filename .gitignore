@@ -7,4 +7,7 @@ dist/
 .test-search/
 .test-start/
 .test-features/
+release/
+packages/desktop/build/
+packages/desktop/tmp/
 .DS_Store

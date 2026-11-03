@@ -1,0 +1,60 @@
+name: main
+
+# Stable releases. Pushing to main opens a deployment job in the `production`
+# environment; configure required reviewers in the repository settings so the
+# release waits for a human.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: main
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Stamp the stable version
+        shell: pwsh
+        run: |
+          $version = "0.1.${{ github.run_number }}"
+          npm version $version --no-git-tag-version --allow-same-version -w @openweb/desktop
+
+      - name: Test
+        run: npm test
+
+      - name: Build and publish the installer
+        env:
+          OPENWEB_CHANNEL: latest
+          OPENWEB_PUBLISH: always
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: npm run package
+
+      - name: Upload the installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: openweb-${{ github.run_number }}
+          path: |
+            release/*.exe
+            release/latest.yml
+          if-no-files-found: error
+          retention-days: 90

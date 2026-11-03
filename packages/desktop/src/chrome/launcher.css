@@ -1,0 +1,27 @@
+/* The launcher lives in its own WebContentsView drawn over the page, so it
+   needs to be a full-bleed surface instead of a floating dropdown. */
+
+html,
+body.overlay {
+  height: 100%;
+  overflow: hidden;
+  background: #08080a;
+}
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(circle at 78% 6%, rgba(45, 74, 56, 0.3) 0, transparent 46%),
+    rgba(6, 6, 8, 0.78);
+}
+
+.launcher {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  width: min(388px, calc(100vw - 24px));
+  max-height: calc(100vh - 20px);
+  border-radius: 12px;
+  box-shadow: 0 26px 80px rgba(0, 0, 0, 0.72);
+}

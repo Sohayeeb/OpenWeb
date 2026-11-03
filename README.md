@@ -5,11 +5,15 @@ No ads. No trackers. No AI-generated content. No hosting bill.
 
 **Status:** working browser-like product. One command publishes a site, starts the
 gateway, crawls the site into a local SQLite index, and opens a Chrome-style new
-tab. Sites survive their author going offline when somebody pins them; indexes and
+tab. The new `packages/desktop` app is a standalone Electron browser: the window
+*is* the browser, with its own address bar, tabs, app launcher, and an installer.
+Sites survive their author going offline when somebody pins them; indexes and
 directories can be published as drives; the website builder writes one static HTML
-file; and the gateway installs as an app window.
+file.
 
-Requires **Node 24 or newer** (the index uses the built-in `node:sqlite`).
+Requires **Node 24 or newer** to build from source (the index uses the built-in
+`node:sqlite`). The Windows installer bundles its own runtime; end users do not
+need Node.
 
 ## Try it
 
@@ -23,7 +27,25 @@ Open `http://127.0.0.1:8080/`. You get a new-tab page with one large search fiel
 a dotted app launcher, and every site this machine has read. The site itself is at
 the printed address. `Ctrl+C` takes it offline.
 
-To get the installed-app experience:
+To get the browser experience without a terminal:
+
+```sh
+npm run package        # Windows installer in release/OpenWeb-<version>-x64.exe
+```
+
+Run the installer, launch **OpenWeb**, and that is the whole product. The window is
+the browser: its own tabs, `openweb://` address bar, back/forward/reload, and the
+dotted-grid app launcher. The node, gateway, crawler, seeder, and indexer start
+inside the app and shut down with it. Nothing opens a terminal, and no
+`http://127.0.0.1:...` address is ever shown or typed.
+
+For development, or to run the same shell from the repo:
+
+```sh
+npm run desktop        # build the packages and launch the Electron app
+```
+
+The older web-only paths still work:
 
 ```sh
 node packages/cli/dist/index.js install          # write launchers
@@ -35,6 +57,40 @@ node packages/cli/dist/index.js browser          # run the stack in a Chrome/Edg
 Edge in `--app=` mode. If neither is installed it prints the URL instead. The
 gateway also serves a web manifest and service worker, so Chrome or Edge can
 install it from the address bar.
+
+### The desktop app
+
+`packages/desktop` is an Electron shell (`BaseWindow` plus one `WebContentsView` for
+the chrome and one per tab). It bundles the existing daemons instead of
+reimplementing them:
+
+- `@openweb/node` publishes `app/` from the machine and announces it on the DHT.
+- `@openweb/gateway` binds an ephemeral `127.0.0.1` port; the shell translates
+  `openweb://` addresses to that origin and never exposes it in the UI.
+- `@openweb/index` crawls the local site into `%APPDATA%\OpenWeb\index.db` and
+  refreshes it while the app stays open.
+- Pins in `%APPDATA%\OpenWeb\pins.json` are re-seeded in the background.
+
+Gateway pages rendered for the shell request with `x-openweb-desktop: 1`, so the
+gateway suppresses its own browser bar and service worker. Everything lives under
+`%APPDATA%\OpenWeb`, including `openweb.log`.
+
+### Builds and channels
+
+The installer is built with electron-builder. `electron-updater` reads a channel
+from the branch that produced the build:
+
+| Branch | Channel | When | Who can ship |
+| --- | --- | --- | --- |
+| `main` | `latest` (stable) | On every push to `main` | Maintainers; the `production` environment requires approval |
+| `beta` | `beta` | On every push to `beta` | The `beta` environment requires approval |
+| `nightly` | `nightly` | Daily at 06:00 UTC, plus manual runs | Automated; no approval |
+| `test` | none | Pushes and pull requests | CI only. Never installed, never merged directly to `main` |
+
+`OPENWEB_CHANNEL` overrides the branch name for a local build. Installers are
+published as GitHub Releases; a running app checks its own channel every six hours
+and offers to restart when a build is ready. `test` builds compile, typecheck, and
+run the tests, but they are not packaged for release.
 
 `start` is only the convenient bundle. The pieces run separately:
 
@@ -315,6 +371,8 @@ No DNS. No ports opened. No certificate authority. No server bills.
 | `packages/gateway` | New tab, address bar, sites, search, directory, shared indexes, builder, PWA assets, browser chrome. |
 | `packages/builder` | The static site renderer used by both the CLI and the gateway. |
 | `packages/cli` | The commands above, plus app-window launching and install scripts. |
+| `packages/desktop` | The standalone Electron browser: shell chrome, in-process daemons, installers, auto-updates. |
+| `.github/workflows/` | `test` CI, `nightly`, `beta`, and stable `main` release channels. |
 | `examples/` | Two small protocol fixtures used by the end-to-end tests. |
 | `extension/` | OpenWeb mode: offline signature verification, network blocking, settings, blocked page. |
 | `scripts/e2e.ps1` | Publish the unified site, read it through the gateway, follow the address bar. |
@@ -329,7 +387,12 @@ npm run e2e            # unified site, browser bar, address redirect, over the D
 npm run e2e:search     # two peers, crawl, query via CLI and gateway, /sites
 npm run e2e:features   # new tab, directory API, builder, PWA, shared index, pinning
 npm run bench          # build and query a 20,000-page synthetic index
+npm run package        # Windows NSIS installer with the desktop browser
 ```
+
+The desktop shell is also exercised directly: `OPENWEB_SMOKE=1` drives the real
+chrome through a search, a local site, the launcher, and tab creation/closing, then
+exits with a JSON report.
 
 The e2e scripts assert on content, so a regression fails loudly. They need the DHT
 and run on loopback; no external services are involved.
@@ -349,6 +412,8 @@ and run on loopback; no external services are involved.
   pages.
 - The extension permits localhost generally so a second gateway port still works;
   `strict` still limits OpenWeb paths to signed addresses.
+- The desktop app publishes the bundled `app/` folder. Authoring your own site is
+  still the `openweb serve <folder>` / `openweb new` workflow.
 - Ranking is lexical. Synonyms and fuzzy matching are a small hand-written table
   and bounded edit distance, not a model.
 - Static files only. No JavaScript executes on published pages.

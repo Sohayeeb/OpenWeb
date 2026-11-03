@@ -46,6 +46,7 @@ import { defaultSpec, renderSite, specFromFields, type SiteSpec } from '@openweb
 import Corestore from 'corestore'
 import Hyperdrive from 'hyperdrive'
 import Hyperswarm from 'hyperswarm'
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { readFileSync, statSync } from 'node:fs'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { join, resolve } from 'node:path'
@@ -53,6 +54,15 @@ import { SERVICE_WORKER, WEB_MANIFEST, iconPng } from './pwa.js'
 
 export const DEFAULT_GATEWAY_DIR = '.openweb'
 export const DEFAULT_GATEWAY_PORT = 8080
+
+/**
+ * The desktop shell paints its own address bar, so gateway pages rendered for
+ * it must not include the browser bar. The shell tags every request with
+ * `x-openweb-desktop: 1`; AsyncLocalStorage keeps concurrent requests apart.
+ */
+const desktopMode = new AsyncLocalStorage<boolean>()
+
+export const DESKTOP_HEADER = 'x-openweb-desktop'
 
 export interface GatewayOptions {
   /** Where gateway state, the index, and signed records live. */
@@ -64,6 +74,8 @@ export interface GatewayOptions {
 
 export interface Gateway {
   url: string
+  /** The port the server actually bound to (useful when `port: 0`). */
+  port: number
   /** Wait until the read-only drive has caught up to a published version. */
   waitForVersion(address: string, version: number, timeoutMs?: number): Promise<boolean>
   indexStats(): { documents: number; terms: number; built: number }
@@ -524,7 +536,7 @@ export async function startGateway(options: GatewayOptions = {}): Promise<Gatewa
         let html = rewriteHtml(new TextDecoder().decode(body), address)
 
         const isCrawler = request.headers['x-openweb-crawl'] === '1'
-        if (!isCrawler && wantsBrowserChrome(html)) {
+        if (!isCrawler && !desktopMode.getStore() && wantsBrowserChrome(html)) {
           html = injectBrowserChrome(html, address, sitePath)
         }
 
@@ -548,7 +560,10 @@ export async function startGateway(options: GatewayOptions = {}): Promise<Gatewa
   }
 
   const server = createServer((request, response) => {
-    void handle(request, response)
+    const desktop = request.headers[DESKTOP_HEADER] === '1'
+    desktopMode.run(desktop, () => {
+      void handle(request, response)
+    })
   })
 
   // Force the empty index into existence once, so the first search and a
@@ -556,10 +571,11 @@ export async function startGateway(options: GatewayOptions = {}): Promise<Gatewa
   const warmIndex = currentIndex()
   warmIndex.search('warmup', 1)
 
-  await listen(server, port)
+  const boundPort = await listen(server, port)
 
   return {
-    url: `http://127.0.0.1:${port}/`,
+    url: `http://127.0.0.1:${boundPort}/`,
+    port: boundPort,
     async waitForVersion(address: string, version: number, ms = 10_000): Promise<boolean> {
       const drive = await driveFor(address)
       const current = (): number => (drive as unknown as { version: number }).version
@@ -883,19 +899,20 @@ main{padding:2.8rem 0 5rem}
 `
 
 function page(title: string, body: string): string {
+  const desktop = desktopMode.getStore() === true
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${escapeHtml(title)} — OpenWeb</title>
-<link rel="manifest" href="/manifest.webmanifest" />
+${desktop ? '' : '<link rel="manifest" href="/manifest.webmanifest" />'}
 <meta name="theme-color" content="#0a0a0b" />
 <style>${CHROME_CSS}${PAGE_CSS}</style>
-<script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});</script>
+${desktop ? '' : "<script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});</script>"}
 </head>
 <body>
-${browserBar()}
+${desktop ? '' : browserBar()}
 ${body}
 </body>
 </html>
@@ -1273,10 +1290,13 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   })
 }
 
-function listen(server: Server, port: number): Promise<void> {
+function listen(server: Server, port: number): Promise<number> {
   return new Promise((resolvePromise, reject) => {
     server.once('error', reject)
-    server.listen(port, '127.0.0.1', () => resolvePromise())
+    server.listen(port, '127.0.0.1', () => {
+      const address = server.address()
+      resolvePromise(typeof address === 'object' && address !== null ? address.port : port)
+    })
   })
 }
 
