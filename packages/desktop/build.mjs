@@ -19,7 +19,6 @@ const here = dirname(fileURLToPath(import.meta.url))
 const repo = resolve(here, '..', '..')
 const dist = join(here, 'dist')
 const buildDir = join(here, 'build')
-const packageDir = process.env.OPENWEB_PUBLISH === 'always'
 
 /** Native modules stay outside the bundle so Electron can load their N-API binaries. */
 const EXTERNAL = [
@@ -234,11 +233,13 @@ async function packageApp(channel, dirOnly) {
   const { Platform, Arch } = electronBuilder
 
   const config = builderConfig(channel, dirOnly)
-  const publish = packageDir ? 'always' : 'never'
 
-  console.log(
-    `packaging ${dirOnly ? 'unpacked app' : 'NSIS installer'} for ${channel} (publish: ${publish})`,
-  )
+  // electron-builder only compiles and writes metadata (app-update.yml,
+  // latest.yml); the release itself is created by `gh release create` in CI.
+  // Its own GitHub publisher races the release creation and drops the .yml.
+  const publish = 'never'
+
+  console.log(`packaging ${dirOnly ? 'unpacked app' : 'NSIS installer'} for ${channel}`)
 
   const options = dirOnly
     ? { dir: true, publish, config, projectDir: here }

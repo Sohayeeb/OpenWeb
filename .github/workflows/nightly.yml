@@ -41,13 +41,26 @@ jobs:
       - name: Test
         run: npm test
 
-      - name: Build and publish the installer
+      - name: Build the installer
         env:
           OPENWEB_CHANNEL: nightly
-          OPENWEB_PUBLISH: always
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: false
         run: npm run package
+
+      - name: Publish the prerelease
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $version = node -p "require('./packages/desktop/package.json').version"
+          $assets = @(
+            "release/OpenWeb-$version-x64.exe"
+            "release/OpenWeb-$version-x64.exe.blockmap"
+          )
+          $assets += Get-ChildItem release -Filter '*.yml' |
+            Where-Object { $_.Name -in @('latest.yml', 'beta.yml', 'nightly.yml') } |
+            ForEach-Object { $_.FullName }
+          gh release create "v$version" $assets --title $version --prerelease --generate-notes
 
       - name: Upload the installer
         uses: actions/upload-artifact@v4
@@ -55,7 +68,7 @@ jobs:
           name: openweb-nightly-${{ github.run_number }}
           path: |
             release/*.exe
-            release/nightly.yml
-            release/latest.yml
+            release/*.yml
+            release/*.blockmap
           if-no-files-found: error
           retention-days: 14
