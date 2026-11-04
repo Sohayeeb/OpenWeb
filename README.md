@@ -87,10 +87,13 @@ from the branch that produced the build:
 | `nightly` | `nightly` | Daily at 06:00 UTC, plus manual runs | Automated; no approval |
 | `test` | none | Pushes and pull requests | CI only. Never installed, never merged directly to `main` |
 
-`OPENWEB_CHANNEL` overrides the branch name for a local build. Installers are
-published as GitHub Releases; a running app checks its own channel every six hours
-and offers to restart when a build is ready. `test` builds compile, typecheck, and
-run the tests, but they are not packaged for release.
+`OPENWEB_CHANNEL` overrides the branch name for a local build. Each workflow builds
+the installer and then creates the GitHub Release itself, uploading the `.exe`, its
+blockmap, and the channel's update metadata (`latest.yml`, `beta.yml`, or
+`nightly.yml`). `electron-builder` only produces those files locally so the two
+cannot race. A running app checks its own channel every six hours and offers to
+restart when a build is ready. `test` builds compile, typecheck, and run the tests,
+but they are not packaged for release.
 
 `start` is only the convenient bundle. The pieces run separately:
 
