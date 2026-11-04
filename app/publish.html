@@ -7,7 +7,7 @@
     <title>Publish — OpenWeb</title>
     <meta
       name="description"
-      content="Put a folder on the peer-to-peer web in one command. No account, no host, no build step."
+      content="Put a folder on the peer-to-peer web from the browser. No account, no host, no build step."
     />
     <link rel="stylesheet" href="/style.css" />
   </head>
@@ -29,17 +29,17 @@
       <p class="eyebrow">Publish</p>
       <h1 class="display">Your PC is the host. That is the whole plan.</h1>
       <p class="lede">
-        A site is a folder. Serving it is one command. The address is a key that
-        belongs to you, not a name rented from somebody else.
+        A site is a folder. In the OpenWeb app you publish it from this window:
+        choose a folder, get an address. The key belongs to you, not to a name
+        rented from somebody else.
       </p>
 
       <div class="prose">
         <p>
           OpenWeb does not need a deployment pipeline because there is nowhere to
           deploy to. The files stay on your disk. The node announces the drive's
-          key on a DHT and answers readers directly. When you stop the process,
-          the site goes offline. When you start it again, the same address comes
-          back.
+          key on a DHT and answers readers directly. When you close the app, the
+          site goes offline. When you open it again, the same address comes back.
         </p>
       </div>
 
@@ -52,33 +52,36 @@
 └── another-page.html</code></pre>
         <p class="hint">
           Static files only. No JavaScript runs in v1. Relative links and links
-          that start with <code>/</code> both work.
+          that start with <code>/</code> both work. Or let the
+          <a href="/builder">builder</a> write the page for you.
         </p>
       </section>
 
       <section class="section">
         <p class="eyebrow">Step two</p>
-        <h2>Publish it.</h2>
-        <pre><code>node packages/cli/dist/index.js serve my-site</code></pre>
-        <p class="hint">
-          Or, after <code>npm link</code>, just <code>openweb serve my-site</code>.
-          The state lives in <code>.openweb/</code> and the keypair never leaves
-          your machine.
+        <h2>Publish it from the browser.</h2>
+        <p class="searchbar">
+          <a class="button" href="/publish">open the publish page</a>
         </p>
-        <pre><code>online
-
-  address   ow1vkmfwikivezc27lqizjyoapya2bqhyh63d6hofbn6rdpemdtybdq
-  preview   http://127.0.0.1:7777/
-  published 3 file(s) from my-site</code></pre>
+        <p class="hint">
+          Pick the folder in the native picker, or type its path. Each folder gets
+          its own key and address; publishing a second folder never overwrites the
+          first. Everything is stored in this app's data folder and restored on
+          the next launch.
+        </p>
+        <p class="hint">
+          From a terminal, the same thing is
+          <code>openweb serve my-site</code>.
+        </p>
       </section>
 
       <section class="section">
         <p class="eyebrow">Step three</p>
-        <h2>Open the address through a gateway.</h2>
-        <pre><code>node packages/cli/dist/index.js open &lt;address&gt;</code></pre>
+        <h2>Open the address.</h2>
         <p class="hint">
-          The gateway resolves the key, joins the drive's topic, and speaks plain
-          HTTP to your browser. It is the only bridge between the two worlds.
+          Paste <code>openweb://&lt;address&gt;/</code> into the address bar. The
+          gateway resolves the key, joins the drive's topic, and speaks plain HTTP
+          to the page view. It is the only bridge between the two worlds.
         </p>
       </section>
 
@@ -87,13 +90,14 @@
         <h2>Let people find it.</h2>
         <p class="lede">
           There is no global index. A search engine on OpenWeb is a crawler plus
-          an index file that one person owns. Seed it with your address:
+          an index file that one person owns. The app publishes its own sites into
+          the local index automatically; add others from the
+          <a href="/sites">sites page</a>.
         </p>
-        <pre><code>node packages/cli/dist/index.js crawl &lt;address&gt; --dir .openweb --max 200
-node packages/cli/dist/index.js search "your words" --dir .openweb</code></pre>
         <p class="hint">
-          Or point the gateway at it and use the search box in the browser bar:
-          <code>http://127.0.0.1:8080/search?q=your+words</code>.
+          Then publish your index from <a href="/shared">shared index</a> so other
+          people can query what you crawled, or add your site to a signed
+          <a href="/directory">directory</a>.
         </p>
       </section>
 
@@ -121,7 +125,7 @@ node packages/cli/dist/index.js search "your words" --dir .openweb</code></pre>
 
     <footer class="site-foot">
       <div class="wrap">
-        <p><strong>OpenWeb</strong> — one command between a folder and the web.</p>
+        <p><strong>OpenWeb</strong> — one window between a folder and the web.</p>
         <p class="tiny">No deploy button. No account. No bill.</p>
       </div>
     </footer>

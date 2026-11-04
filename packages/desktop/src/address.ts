@@ -9,7 +9,7 @@ import { isAddress } from '@openweb/core'
 export const HOME = 'openweb://home'
 
 /** Gateway pages that are part of OpenWeb itself, not a site address. */
-const PAGES = new Set(['search', 'sites', 'directory', 'shared', 'builder'])
+const PAGES = new Set(['search', 'sites', 'directory', 'shared', 'builder', 'publish'])
 
 export interface Resolution {
   kind: 'internal' | 'external'

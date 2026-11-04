@@ -23,10 +23,11 @@ import {
   type WebContents,
 } from 'electron'
 import { autoUpdater } from 'electron-updater'
-import { appendFileSync, existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { appendFileSync, existsSync, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
 import { displayForUrl, internalUrl, resolveAddressInput, HOME } from './address.js'
 import { listLauncherSites } from './launcher.js'
+import { readPublishedSites } from './published.js'
 import { startStack, type Stack } from './services.js'
 
 declare const __OPENWEB_CHANNEL__: string
@@ -110,7 +111,10 @@ app.on('before-quit', (event) => {
 })
 
 async function bootstrap(): Promise<void> {
-  dataDir = join(app.getPath('appData'), 'OpenWeb')
+  // A test or smoke run can isolate itself from the real profile.
+  dataDir = process.env['OPENWEB_DATA_DIR']
+    ? resolve(process.env['OPENWEB_DATA_DIR'])
+    : join(app.getPath('appData'), 'OpenWeb')
   logFile = join(dataDir, 'openweb.log')
   mkdirSync(dataDir, { recursive: true })
   trimLog()
@@ -127,6 +131,7 @@ async function bootstrap(): Promise<void> {
     stack = await startStack({
       dir: dataDir,
       siteFolder: siteFolder(),
+      chooseFolder: () => pickFolder(),
       onStatus: (message) => sendStatus(message),
       onError: (error) => log('stack:', messageOf(error)),
     })
@@ -176,6 +181,28 @@ async function runSmoke(): Promise<void> {
       report.site = await inspectTab()
     }
 
+    // Publish through the same HTTP forms a person would submit, read the
+    // result back out of the gateway, then clean up everything it created.
+    if (stack) {
+      const folder = join(app.getPath('temp'), `openweb-smoke-${Date.now()}`)
+      mkdirSync(folder, { recursive: true })
+      writeFileSync(
+        join(folder, 'index.html'),
+        '<!doctype html><meta charset="utf-8"><title>Smoke test</title><p>smoke-test-page</p>',
+      )
+
+      const publish = await smokePublish(folder)
+      report.publish = publish
+      const address = publish.address
+      if (typeof address === 'string' && address !== '') {
+        navigateActive(`openweb://${address}/`)
+        await wait(2_000)
+        report.publishedSite = await inspectTab()
+        report.publishCleanup = await smokeForget(address)
+      }
+      rmSync(folder, { recursive: true, force: true })
+    }
+
     await shellView?.webContents.executeJavaScript(
       `document.getElementById('apps').click(); true`,
     )
@@ -207,6 +234,52 @@ async function runSmoke(): Promise<void> {
 
   log('smoke:', JSON.stringify(report, null, 2))
   app.quit()
+}
+
+/** Publish a folder through the browser form and verify the gateway serves it. */
+async function smokePublish(folder: string): Promise<Record<string, unknown>> {
+  if (!stack) return { error: 'the stack did not start' }
+  const base = stack.gatewayUrl.replace(/\/+$/, '')
+
+  const posted = await fetch(`${base}/publish`, {
+    method: 'POST',
+    body: new URLSearchParams({ action: 'folder', folder, title: 'Smoke test' }),
+    redirect: 'manual',
+  })
+  const location = posted.headers.get('location') ?? ''
+  const address = new URL(location, base).searchParams.get('published') ?? ''
+  if (address === '') return { error: 'no address in the redirect', status: posted.status, location }
+
+  const page = await fetch(`${base}/${address}/`)
+  const text = await page.text()
+  const known = listLauncherSites(dataDir).find((site) => site.address === address)
+
+  return {
+    status: posted.status,
+    address,
+    served: page.status === 200 && text.includes('smoke-test-page'),
+    launcher: known?.title ?? null,
+  }
+}
+
+/** Take the smoke site offline and delete the state it created. */
+async function smokeForget(address: string): Promise<Record<string, unknown>> {
+  if (!stack) return { error: 'the stack did not start' }
+  const base = stack.gatewayUrl.replace(/\/+$/, '')
+  const record = readPublishedSites(dataDir).find((site) => site.address === address)
+
+  const posted = await fetch(`${base}/publish`, {
+    method: 'POST',
+    body: new URLSearchParams({ action: 'forget', address }),
+    redirect: 'manual',
+  })
+
+  if (record) rmSync(record.stateDir, { recursive: true, force: true })
+
+  return {
+    status: posted.status,
+    forgotten: !readPublishedSites(dataDir).some((site) => site.address === address),
+  }
 }
 
 async function inspectTab(): Promise<Record<string, unknown> | null> {
@@ -310,6 +383,22 @@ function siteFolder(): string {
   if (app.isPackaged) return join(process.resourcesPath, 'app')
   // __dirname is packages/desktop/dist; the repo's app/ is three levels up.
   return join(here, '..', '..', '..', 'app')
+}
+
+/**
+ * The native folder picker behind "choose a folder…" on the publish page.
+ * Returning null means the user cancelled, and the gateway reports that
+ * without publishing anything.
+ */
+async function pickFolder(): Promise<string | null> {
+  if (!win) return null
+  const result = await dialog.showOpenDialog(win, {
+    title: 'Choose a folder to publish',
+    buttonLabel: 'Publish this folder',
+    properties: ['openDirectory'],
+  })
+  if (result.canceled) return null
+  return result.filePaths[0] ?? null
 }
 
 /** A deep link passed by Windows: OpenWeb-1.0.0.exe openweb://ow1… */
@@ -466,6 +555,11 @@ function installDesktopHeader(): void {
 /* Tabs                                                                       */
 /* -------------------------------------------------------------------------- */
 
+/** Page JavaScript is off except for the dev helpers that inspect the view. */
+function pageScriptsEnabled(): boolean {
+  return process.env['OPENWEB_PAGE_JS'] === '1' || Boolean(process.env['OPENWEB_SMOKE'] || process.env['OPENWEB_CAPTURE'])
+}
+
 function createTab(input: string, activate: boolean): Tab {
   const view = new WebContentsView({
     webPreferences: {
@@ -475,6 +569,10 @@ function createTab(input: string, activate: boolean): Tab {
       webviewTag: false,
       spellcheck: true,
       backgroundThrottling: false,
+      // Published pages are static by design. Keeping JavaScript off means a
+      // site cannot script the gateway's publish forms. The smoke and capture
+      // helpers need to evaluate strings in the view, so they opt back in.
+      javascript: pageScriptsEnabled(),
     },
   })
   view.setBackgroundColor('#0a0a0b')

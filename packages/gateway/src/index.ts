@@ -9,6 +9,10 @@
  *   GET /directory             the signed human directory, local or remote
  *   GET /shared?address=…&q=…  query somebody else's published index
  *   GET /builder               make a static page without a framework
+ *   GET /publish               publish a folder from the desktop app
+ *   POST /publish /sites /directory /shared /builder
+ *                              the same pages' actions: publish, crawl, pin,
+ *                              sign, share, and import. Same-origin only.
  *   GET /manifest.webmanifest  make the gateway installable as an app window
  *
  * It decodes the address back into a drive key, joins that drive's DHT topic,
@@ -20,17 +24,25 @@
  */
 
 import {
+  addDirectoryEntry,
+  createSignedDirectory,
   decodeAddress,
   drivePathFor,
+  ensureIdentity,
+  identityAddress,
   isAddress,
   loadDirectory,
   mergeDirectoryEntries,
   parseGatewayPath,
   parseOpenWebUrl,
   readFromDrive,
+  removeDirectoryEntry,
+  saveDirectory,
+  signDirectory,
   verifyDirectory,
   type DirectoryDocument,
   type DirectoryVerification,
+  type FileResponse,
   type Signed,
 } from '@openweb/core'
 import {
@@ -47,7 +59,7 @@ import Corestore from 'corestore'
 import Hyperdrive from 'hyperdrive'
 import Hyperswarm from 'hyperswarm'
 import { AsyncLocalStorage } from 'node:async_hooks'
-import { readFileSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { join, resolve } from 'node:path'
 import { SERVICE_WORKER, WEB_MANIFEST, iconPng } from './pwa.js'
@@ -70,6 +82,50 @@ export interface GatewayOptions {
   port?: number
   /** How long to wait for a peer before giving up. */
   timeoutMs?: number
+  /**
+   * Publishing actions. The desktop shell supplies this so its pages can
+   * publish folders, write pages, pin sites, and share indexes. A plain
+   * gateway leaves it out and the pages explain the CLI instead.
+   */
+  publisher?: GatewayPublisher
+}
+
+export interface PublishedSiteInfo {
+  address: string
+  title: string
+  folder: string
+  pages: number
+  kind: 'folder' | 'page' | 'app'
+  online: boolean
+  builtin: boolean
+}
+
+export interface CrawlSummary {
+  pages: number
+  documents: number
+  terms: number
+}
+
+/** Everything a gateway page may ask the desktop publisher to do. */
+export interface GatewayPublisher {
+  listSites(): PublishedSiteInfo[]
+  canChooseFolder(): boolean
+  chooseFolder(): Promise<string | null>
+  publishFolder(folder: string, title?: string): Promise<PublishedSiteInfo>
+  publishPage(spec: SiteSpec): Promise<PublishedSiteInfo>
+  republish(address: string): Promise<PublishedSiteInfo>
+  forget(address: string): Promise<boolean>
+  crawlSite(address: string, maxPages?: number): Promise<CrawlSummary>
+  pinSite(address: string): Promise<{ address: string; complete: boolean }>
+  unpinSite(address: string): Promise<boolean>
+  pinnedAddresses(): string[]
+  publishDirectory(signed: Signed<DirectoryDocument>): Promise<{ address: string; entries: number }>
+  directoryAddress(): string | null
+  publishIndex(): Promise<{ address: string; manifest: IndexManifest }>
+  indexAddress(): string | null
+  importIndex(address: string): Promise<CrawlSummary & { imported: number }>
+  readLocal(address: string, path: string): Promise<FileResponse | null>
+  localAddresses(): string[]
 }
 
 export interface Gateway {
@@ -86,6 +142,7 @@ export async function startGateway(options: GatewayOptions = {}): Promise<Gatewa
   const dir = resolve(options.dir ?? DEFAULT_GATEWAY_DIR)
   const port = options.port ?? DEFAULT_GATEWAY_PORT
   const timeoutMs = options.timeoutMs ?? 20_000
+  const publisher = options.publisher ?? null
   const debug = Boolean(process.env['OPENWEB_DEBUG'])
   const indexPath = indexFileFor(dir)
 
@@ -222,6 +279,12 @@ export async function startGateway(options: GatewayOptions = {}): Promise<Gatewa
     try {
       const url = new URL(request.url ?? '/', 'http://localhost')
 
+      // --- write actions ------------------------------------------------
+      if (request.method === 'POST') {
+        const handled = await handlePost({ dir, publisher }, request, response, url)
+        if (handled) return
+      }
+
       // --- installable shell -------------------------------------------------
       if (url.pathname === '/manifest.webmanifest') {
         send(response, 200, 'application/manifest+json; charset=utf-8', JSON.stringify(WEB_MANIFEST), {
@@ -264,6 +327,22 @@ export async function startGateway(options: GatewayOptions = {}): Promise<Gatewa
         return
       }
 
+      // --- publish -----------------------------------------------------------
+      if (url.pathname === '/publish') {
+        send(
+          response,
+          200,
+          'text/html; charset=utf-8',
+          publishPage(publisher, {
+            published: url.searchParams.get('published') ?? '',
+            notice: url.searchParams.get('notice') ?? '',
+            error: url.searchParams.get('error') ?? '',
+          }),
+          { 'cache-control': 'no-store' },
+        )
+        return
+      }
+
       // --- sites -------------------------------------------------------------
       if (url.pathname === '/sites') {
         const index = currentIndex()
@@ -273,7 +352,12 @@ export async function startGateway(options: GatewayOptions = {}): Promise<Gatewa
           response,
           200,
           'text/html; charset=utf-8',
-          pages ? siteDetailPage(address, pages, index) : sitesPage(index),
+          pages
+            ? siteDetailPage(address, pages, index)
+            : sitesPage(index, publisher, {
+                notice: url.searchParams.get('notice') ?? '',
+                error: url.searchParams.get('error') ?? '',
+              }),
           { 'cache-control': 'no-store' },
         )
         return
@@ -398,7 +482,15 @@ export async function startGateway(options: GatewayOptions = {}): Promise<Gatewa
           response,
           200,
           'text/html; charset=utf-8',
-          directoryPage(verification, { source, sourceAddress, localDirectoryAddress, error }),
+          directoryPage(verification, {
+            source,
+            sourceAddress,
+            localDirectoryAddress,
+            error: error || (url.searchParams.get('error') ?? ''),
+            notice: url.searchParams.get('notice') ?? '',
+            addAddress: url.searchParams.get('add') ?? '',
+            canPublish: publisher !== null,
+          }),
           { 'cache-control': 'no-store' },
         )
         return
@@ -410,9 +502,23 @@ export async function startGateway(options: GatewayOptions = {}): Promise<Gatewa
         const query = url.searchParams.get('q') ?? ''
 
         if (address === '') {
-          send(response, 200, 'text/html; charset=utf-8', sharedPage(null, null, '', null, 0, ''), {
-            'cache-control': 'no-store',
-          })
+          send(
+            response,
+            200,
+            'text/html; charset=utf-8',
+            sharedPage(
+              null,
+              null,
+              '',
+              null,
+              0,
+              '',
+              publisher,
+              url.searchParams.get('notice') ?? '',
+              url.searchParams.get('error') ?? '',
+            ),
+            { 'cache-control': 'no-store' },
+          )
           return
         }
         if (!isAddress(address)) {
@@ -458,7 +564,17 @@ export async function startGateway(options: GatewayOptions = {}): Promise<Gatewa
             response,
             200,
             'text/html; charset=utf-8',
-            sharedPage(address, fetched.manifest, query, found, tookMs, ''),
+            sharedPage(
+              address,
+              fetched.manifest,
+              query,
+              found,
+              tookMs,
+              '',
+              publisher,
+              url.searchParams.get('notice') ?? '',
+              url.searchParams.get('error') ?? '',
+            ),
             { 'cache-control': 'no-store' },
           )
         } catch (caught) {
@@ -470,7 +586,17 @@ export async function startGateway(options: GatewayOptions = {}): Promise<Gatewa
               response,
               502,
               'text/html; charset=utf-8',
-              sharedPage(address, null, query, null, 0, message),
+              sharedPage(
+                address,
+                null,
+                query,
+                null,
+                0,
+                message,
+                publisher,
+                url.searchParams.get('notice') ?? '',
+                url.searchParams.get('error') ?? '',
+              ),
               { 'cache-control': 'no-store' },
             )
           }
@@ -480,35 +606,13 @@ export async function startGateway(options: GatewayOptions = {}): Promise<Gatewa
 
       // --- builder -----------------------------------------------------------
       if (url.pathname === '/builder') {
-        if (request.method === 'POST') {
-          const body = await readBody(request)
-          const fields = Object.fromEntries(new URLSearchParams(body))
-          const spec = specFromFields(fields)
-          if (spec.title.trim() === '') spec.title = 'A small page'
-          if (spec.tagline.trim() === '') spec.tagline = 'Written by a person, served from a computer.'
-          const built = renderSite(spec)
-
-          if (fields['download'] === '1') {
-            send(response, 200, 'text/html; charset=utf-8', built.html, {
-              'content-disposition': 'attachment; filename="index.html"',
-              'cache-control': 'no-store',
-            })
-            return
-          }
-
-          send(
-            response,
-            200,
-            'text/html; charset=utf-8',
-            builderPage(spec, built.html, true),
-            { 'cache-control': 'no-store' },
-          )
-          return
-        }
-
-        send(response, 200, 'text/html; charset=utf-8', builderPage(defaultSpec(), null, false), {
-          'cache-control': 'no-store',
-        })
+        send(
+          response,
+          200,
+          'text/html; charset=utf-8',
+          builderPage(defaultSpec(), null, false, publisher !== null),
+          { 'cache-control': 'no-store' },
+        )
         return
       }
 
@@ -528,8 +632,8 @@ export async function startGateway(options: GatewayOptions = {}): Promise<Gatewa
       }
 
       const sitePath = url.pathname.slice(address.length + 1) || '/'
-      const drive = await driveFor(address)
-      const file = await readWhenSynced(drive, sitePath, Date.now() + timeoutMs)
+      const local = publisher ? await publisher.readLocal(address, sitePath) : null
+      const file: FileResponse = local ?? (await readWhenSynced(await driveFor(address), sitePath, Date.now() + timeoutMs))
 
       let body: Uint8Array = file.body
       if (file.status === 200 && file.type.startsWith('text/html')) {
@@ -602,6 +706,379 @@ export async function startGateway(options: GatewayOptions = {}): Promise<Gatewa
 }
 
 // ---------------------------------------------------------------------------
+// Write actions
+// ---------------------------------------------------------------------------
+
+/**
+ * The forms on gateway pages post to the same routes they read from. Every
+ * action is server-rendered and redirects, so the pages work with no script at
+ * all and a refresh never re-submits.
+ *
+ * A plain gateway has no publisher: the actions that need one report that the
+ * desktop app is required instead of failing silently.
+ */
+const POST_ROUTES = new Set(['/publish', '/sites', '/directory', '/shared', '/builder'])
+
+interface PostContext {
+  dir: string
+  publisher: GatewayPublisher | null
+}
+
+async function handlePost(
+  context: PostContext,
+  request: IncomingMessage,
+  response: ServerResponse,
+  url: URL,
+): Promise<boolean> {
+  if (!POST_ROUTES.has(url.pathname)) return false
+
+  // Only the origin this gateway served may submit these forms. Without this,
+  // any website could post to the loopback port and publish or delete sites.
+  if (!sameOrigin(request)) {
+    send(response, 403, 'text/plain; charset=utf-8', 'cross-origin form posts are refused\n')
+    return true
+  }
+
+  // A published page shares the gateway's origin, so the origin check above is
+  // not enough. Require the submission to come from the page that owns the
+  // form. (Page JavaScript is disabled in the desktop shell, so a site cannot
+  // strip or forge this from script.)
+  if (!fromOwnPage(request, url.pathname)) {
+    send(response, 403, 'text/plain; charset=utf-8', 'form submissions must come from their own page\n')
+    return true
+  }
+
+  const fields = Object.fromEntries(new URLSearchParams(await readBody(request, 8_000_000)))
+  const action = fields['action'] ?? ''
+
+  try {
+    switch (url.pathname) {
+      case '/publish':
+        return await publishAction(context, fields, action, response)
+      case '/sites':
+        return await sitesAction(context, fields, action, response)
+      case '/directory':
+        return await directoryAction(context, fields, action, response)
+      case '/shared':
+        return await sharedAction(context, fields, action, response)
+      case '/builder':
+        return builderAction(context, fields, response)
+    }
+  } catch (caught) {
+    redirect(response, flashUrl(url.pathname, '', messageOf(caught)))
+  }
+
+  return true
+}
+
+async function publishAction(
+  context: PostContext,
+  fields: Record<string, string>,
+  action: string,
+  response: ServerResponse,
+): Promise<boolean> {
+  const publisher = context.publisher
+  if (!publisher) throw new Error('publishing from the browser needs the OpenWeb desktop app')
+
+  switch (action) {
+    case 'choose':
+    case 'folder': {
+      let folder = fields['folder']?.trim() ?? ''
+      if (folder === '') {
+        const picked = await publisher.chooseFolder()
+        if (!picked) {
+          redirect(response, flashUrl('/publish', 'No folder chosen.', ''))
+          return true
+        }
+        folder = picked
+      }
+
+      const site = await publisher.publishFolder(folder, fields['title']?.trim() ?? '')
+      redirect(response, `/publish?published=${encodeURIComponent(site.address)}`)
+      return true
+    }
+
+    case 'page': {
+      const spec = specFromFields(fields)
+      if (spec.title.trim() === '') spec.title = 'A small page'
+      if (spec.tagline.trim() === '') spec.tagline = 'Written by a person, served from a computer.'
+
+      const site = await publisher.publishPage(spec)
+      redirect(response, `/publish?published=${encodeURIComponent(site.address)}`)
+      return true
+    }
+
+    case 'republish': {
+      const site = await publisher.republish(fields['address'] ?? '')
+      redirect(response, flashUrl('/publish', `${site.title} is republished.`, ''))
+      return true
+    }
+
+    case 'forget': {
+      const address = fields['address'] ?? ''
+      const removed = await publisher.forget(address)
+      redirect(
+        response,
+        flashUrl('/publish', removed ? 'That site is offline.' : 'That site was not published here.', ''),
+      )
+      return true
+    }
+
+    case 'publish-index': {
+      const { address, manifest } = await publisher.publishIndex()
+      redirect(
+        response,
+        flashUrl(
+          '/shared',
+          `Your index is live at ${address} (${manifest.documents.toLocaleString()} pages).`,
+          '',
+        ),
+      )
+      return true
+    }
+  }
+
+  throw new Error(`unknown publish action: ${action || '(none)'}`)
+}
+
+async function sitesAction(
+  context: PostContext,
+  fields: Record<string, string>,
+  action: string,
+  response: ServerResponse,
+): Promise<boolean> {
+  const publisher = context.publisher
+  if (!publisher) throw new Error('this action needs the OpenWeb desktop app')
+
+  const address = fields['address']?.trim() ?? ''
+
+  switch (action) {
+    case 'crawl': {
+      const pages = Number(fields['max'] ?? 100)
+      const limit = Number.isFinite(pages) ? Math.max(1, Math.min(500, Math.trunc(pages))) : 100
+      const summary = await publisher.crawlSite(address, limit)
+      redirect(
+        response,
+        flashUrl(
+          '/sites',
+          summary.pages === 0
+            ? 'Nothing was reachable at that address.'
+            : `${summary.pages} page(s) crawled · ${summary.documents.toLocaleString()} in the index.`,
+          '',
+        ),
+      )
+      return true
+    }
+
+    case 'pin': {
+      await publisher.pinSite(address)
+      redirect(response, flashUrl('/sites', `Pinning ${shortAddress(address)}.`, ''))
+      return true
+    }
+
+    case 'unpin': {
+      const removed = await publisher.unpinSite(address)
+      redirect(
+        response,
+        flashUrl('/sites', removed ? 'Stopped pinning that site.' : 'That site was not pinned.', ''),
+      )
+      return true
+    }
+  }
+
+  throw new Error(`unknown action: ${action || '(none)'}`)
+}
+
+async function directoryAction(
+  context: PostContext,
+  fields: Record<string, string>,
+  action: string,
+  response: ServerResponse,
+): Promise<boolean> {
+  const file = join(context.dir, 'directory.json')
+  const identityFile = join(context.dir, 'identity.json')
+
+  switch (action) {
+    case 'init': {
+      const identity = ensureIdentity(identityFile)
+      const signed = createSignedDirectory(
+        identity,
+        fields['name'] ?? 'OpenWeb directory',
+        fields['description']?.trim() || undefined,
+      )
+      saveDirectory(file, signed)
+      redirect(response, flashUrl('/directory', 'Directory created and signed.', ''))
+      return true
+    }
+
+    case 'add': {
+      if (!existsSync(file)) throw new Error('create a directory first')
+      const address = fields['address']?.trim() ?? ''
+      if (!isAddress(address)) throw new Error('that is not an OpenWeb address')
+
+      const identity = ensureIdentity(identityFile)
+      const signed = loadDirectory(file)
+      const tags = (fields['tags'] ?? '')
+        .split(',')
+        .map((tag) => tag.trim())
+        .filter(Boolean)
+      const document = addDirectoryEntry(signed.payload, identity, {
+        address,
+        title: fields['title']?.trim() || address,
+        ...(fields['description']?.trim() ? { description: fields['description'].trim() } : {}),
+        ...(tags.length > 0 ? { tags } : {}),
+      })
+      saveDirectory(file, signDirectory(document, identity))
+      redirect(response, flashUrl('/directory', 'Entry added and signed.', ''))
+      return true
+    }
+
+    case 'remove': {
+      if (!existsSync(file)) throw new Error('create a directory first')
+      const identity = ensureIdentity(identityFile)
+      const signed = loadDirectory(file)
+      const document = removeDirectoryEntry(signed.payload, identity, fields['address'] ?? '')
+      saveDirectory(file, signDirectory(document, identity))
+      redirect(response, flashUrl('/directory', 'Entry removed and re-signed.', ''))
+      return true
+    }
+
+    case 'publish': {
+      const publisher = context.publisher
+      if (!publisher) throw new Error('publishing from the browser needs the OpenWeb desktop app')
+      if (!existsSync(file)) throw new Error('create a directory first')
+
+      const signed = loadDirectory(file)
+      const { address, entries } = await publisher.publishDirectory(signed)
+      redirect(
+        response,
+        flashUrl('/directory', `Directory live at ${address} · ${entries} entry/entries.`, ''),
+      )
+      return true
+    }
+  }
+
+  throw new Error(`unknown action: ${action || '(none)'}`)
+}
+
+async function sharedAction(
+  context: PostContext,
+  fields: Record<string, string>,
+  action: string,
+  response: ServerResponse,
+): Promise<boolean> {
+  const publisher = context.publisher
+  if (!publisher) throw new Error('this action needs the OpenWeb desktop app')
+
+  switch (action) {
+    case 'publish': {
+      const { address, manifest } = await publisher.publishIndex()
+      redirect(
+        response,
+        flashUrl(
+          '/shared',
+          `Index published at ${address} · ${manifest.documents.toLocaleString()} pages.`,
+          '',
+        ),
+      )
+      return true
+    }
+
+    case 'import': {
+      const address = fields['address']?.trim() ?? ''
+      const summary = await publisher.importIndex(address)
+      redirect(
+        response,
+        flashUrl(
+          '/shared',
+          `Imported ${summary.imported.toLocaleString()} page(s) · ${summary.documents.toLocaleString()} now searchable.`,
+          '',
+        ),
+      )
+      return true
+    }
+  }
+
+  throw new Error(`unknown action: ${action || '(none)'}`)
+}
+
+function builderAction(
+  context: PostContext,
+  fields: Record<string, string>,
+  response: ServerResponse,
+): boolean {
+  const spec = specFromFields(fields)
+  if (spec.title.trim() === '') spec.title = 'A small page'
+  if (spec.tagline.trim() === '') spec.tagline = 'Written by a person, served from a computer.'
+  const built = renderSite(spec)
+
+  if (fields['download'] === '1') {
+    send(response, 200, 'text/html; charset=utf-8', built.html, {
+      'content-disposition': 'attachment; filename="index.html"',
+      'cache-control': 'no-store',
+    })
+    return true
+  }
+
+  send(
+    response,
+    200,
+    'text/html; charset=utf-8',
+    builderPage(spec, built.html, true, context.publisher !== null),
+    { 'cache-control': 'no-store' },
+  )
+  return true
+}
+
+function sameOrigin(request: IncomingMessage): boolean {
+  const origin = request.headers.origin
+  // No Origin header means a same-origin form post or a non-browser client.
+  if (!origin) return true
+  if (origin === 'null') return false
+  try {
+    return new URL(origin).host === (request.headers.host ?? '')
+  } catch {
+    return false
+  }
+}
+
+/**
+ * The Referer path must match the form's action path. A page served at
+ * `/<address>/…` cannot submit the `/publish`, `/sites`, or `/directory` forms
+ * unless it really is that gateway page.
+ */
+function fromOwnPage(request: IncomingMessage, path: string): boolean {
+  const referer = request.headers.referer
+  if (!referer) return true
+  try {
+    return new URL(referer).pathname === path
+  } catch {
+    return false
+  }
+}
+
+function redirect(response: ServerResponse, location: string): void {
+  response.writeHead(303, { location, 'cache-control': 'no-store' })
+  response.end()
+}
+
+function flashUrl(path: string, notice: string, error: string): string {
+  const params = new URLSearchParams()
+  if (notice) params.set('notice', notice)
+  if (error) params.set('error', error)
+  const query = params.toString()
+  return query ? `${path}?${query}` : path
+}
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function shortAddress(address: string): string {
+  return address.length > 16 ? `${address.slice(0, 12)}…` : address
+}
+
+// ---------------------------------------------------------------------------
 // Request helpers
 // ---------------------------------------------------------------------------
 
@@ -658,6 +1135,7 @@ const GATEWAY_ROUTES = new Set([
   '/directory',
   '/shared',
   '/builder',
+  '/publish',
   '/open',
   '/manifest.webmanifest',
   '/sw.js',
@@ -799,6 +1277,7 @@ function browserBar(location?: string): string {
     </form>
     <nav class="ow-links" aria-label="Browser">
       <a href="/">new tab</a>
+      <a href="/publish">publish</a>
       <a href="/sites">sites</a>
       <a href="/directory">directory</a>
     </nav>
@@ -806,6 +1285,7 @@ function browserBar(location?: string): string {
       <summary aria-label="OpenWeb apps" title="OpenWeb apps"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></summary>
       <div class="ow-app-panel">
         <a href="/"><span class="ow-glyph">⌂</span>new tab</a>
+        <a href="/publish"><span class="ow-glyph">↑</span>publish</a>
         <a href="/search"><span class="ow-glyph">⌕</span>search</a>
         <a href="/sites"><span class="ow-glyph">▤</span>sites</a>
         <a href="/directory"><span class="ow-glyph">✓</span>directory</a>
@@ -888,6 +1368,26 @@ main{padding:2.8rem 0 5rem}
 .ow-form fieldset{display:grid;gap:.6rem;margin:0;padding:.9rem;border:1px solid var(--line)}
 .ow-form legend{padding:0 .4rem;color:var(--faint);font-size:.7rem;letter-spacing:.12em;text-transform:uppercase}
 .ow-form .ow-row{display:flex;gap:.6rem;flex-wrap:wrap}
+.ow-flash{margin:1rem 0;padding:.8rem 1rem;border:1px solid #355040;background:rgba(79,122,95,.14);color:#c8f0d6;font-size:.84rem}
+.ow-actions{display:flex;flex-wrap:wrap;gap:.45rem;margin-top:.9rem;align-items:center}
+.ow-actions form{display:inline;margin:0}
+.ow-actions button,.ow-actions a{display:inline-block;padding:.35rem .65rem;border:1px solid var(--line-2);background:var(--panel-2);color:var(--dim);font:inherit;font-size:.72rem;cursor:pointer;text-decoration:none;line-height:1.4}
+.ow-actions button:hover,.ow-actions a:hover{border-color:var(--accent-dim);color:var(--fg);text-decoration:none}
+.ow-actions button.primary{background:var(--accent);border-color:var(--accent);color:#07130c;font-weight:700}
+.ow-actions button.primary:hover{background:#b5f0c8;color:#07130c}
+.ow-actions button.danger:hover{border-color:#7a3b45;color:#f0b8c0}
+.ow-card .ow-actions{margin-top:.8rem}
+.ow-split{display:grid;grid-template-columns:repeat(auto-fit,minmax(18rem,1fr));gap:1.2rem;margin-top:1.6rem}
+.ow-panel{padding:1rem;border:1px solid var(--line);background:var(--panel)}
+.ow-panel h2{margin:.1rem 0 .5rem;font-family:var(--serif);font-size:1.3rem;font-weight:400;letter-spacing:-.01em}
+.ow-panel p{margin:.2rem 0;font-size:.8rem;color:var(--dim)}
+.ow-panel .ow-form{margin-top:.8rem}
+.ow-panel .ow-form button{justify-self:start}
+.ow-list{display:grid;gap:.5rem;margin:1rem 0 0;padding:0;list-style:none}
+.ow-list li{display:flex;justify-content:space-between;gap:1rem;align-items:center;padding:.55rem .75rem;border:1px solid var(--line);background:var(--panel);font-size:.8rem;flex-wrap:wrap}
+.ow-list li code{color:var(--faint);font-size:.66rem;word-break:break-all}
+.ow-list .ow-actions{margin:0}
+.ow-code{word-break:break-all}
 .ow-preview{width:100%;height:34rem;margin-top:1.2rem;border:1px solid var(--line);background:#0a0a0b}
 .ow-tag{display:inline-block;margin-right:.4rem;padding:.1rem .4rem;border:1px solid var(--line-2);color:var(--faint);font-size:.66rem}
 .ow-error{padding:.8rem 1rem;border:1px solid #7a3b45;background:rgba(122,59,69,.12);color:#f0b8c0;font-size:.82rem}
@@ -941,7 +1441,7 @@ function landing(index: SqliteIndex): string {
     <input name="q" placeholder="search the local web…" aria-label="Search OpenWeb" autocomplete="off" autofocus />
     <button type="submit">search</button>
   </form>
-  <p class="ow-home-note">or paste an address into the bar above · <a href="/builder">build a page</a> · <a href="/directory">signed directory</a> · <a href="/shared">shared index</a></p>
+  <p class="ow-home-note">or paste an address into the bar above · <a href="/publish">publish a site</a> · <a href="/builder">build a page</a> · <a href="/directory">signed directory</a> · <a href="/shared">shared index</a></p>
   ${siteLinks}
 </main>`,
   )
@@ -955,15 +1455,179 @@ function siteCard(site: SiteSummary): string {
 </a>`
 }
 
-function sitesPage(index: SqliteIndex): string {
+function flash(notice: string, error: string): string {
+  return [
+    notice ? `<p class="ow-flash">${escapeHtml(notice)}</p>` : '',
+    error ? `<p class="ow-error">${escapeHtml(error)}</p>` : '',
+  ].join('')
+}
+
+function publishPage(
+  publisher: GatewayPublisher | null,
+  options: { published: string; notice: string; error: string },
+): string {
+  if (!publisher) {
+    return page(
+      'Publish',
+      `<main class="ow-wrap">
+  <p class="ow-kicker">Publish</p>
+  <h1 class="ow-h1">Put a folder on the web.</h1>
+  <p class="ow-lede">This gateway is running without the desktop shell, so it cannot open a folder picker. Publish from a terminal instead, or launch the OpenWeb desktop app.</p>
+  <pre><code>openweb serve &lt;folder&gt;
+openweb new &lt;folder&gt;</code></pre>
+  <p class="ow-hint">The desktop app has the same page with a folder picker and one-click publishing.</p>
+  <footer class="ow-foot"><strong>OpenWeb gateway</strong> — no upload, no account: the folder stays on this computer.</footer>
+</main>`,
+    )
+  }
+
+  const sites = publisher.listSites()
+  const cards = sites
+    .map((site) => {
+      const kind =
+        site.kind === 'app'
+          ? 'bundled with the app'
+          : site.kind === 'page'
+            ? 'page written here'
+            : 'folder on this computer'
+      const actions = site.builtin
+        ? `<a href="/${site.address}/">open</a>
+      <a href="/directory?add=${site.address}">add to directory</a>`
+        : `<a href="/${site.address}/">open</a>
+      <form method="post" action="/publish">
+        <input type="hidden" name="action" value="republish" />
+        <input type="hidden" name="address" value="${site.address}" />
+        <button type="submit">republish</button>
+      </form>
+      <a href="/directory?add=${site.address}">add to directory</a>
+      <form method="post" action="/publish">
+        <input type="hidden" name="action" value="forget" />
+        <input type="hidden" name="address" value="${site.address}" />
+        <button class="danger" type="submit">take offline</button>
+      </form>`
+
+      return `<div class="ow-card">
+  <p class="ow-kicker">${site.online ? 'online' : 'offline'} · ${site.pages} page${site.pages === 1 ? '' : 's'}</p>
+  <strong>${escapeHtml(site.title)}</strong>
+  <code class="ow-code">openweb://${escapeHtml(site.address)}/</code>
+  <p class="ow-hint">${escapeHtml(kind)}${site.builtin ? '' : ` · ${escapeHtml(site.folder)}`}</p>
+  <div class="ow-actions">${actions}</div>
+</div>`
+    })
+    .join('\n')
+
+  const published = options.published
+    ? `<div class="ow-flash">Published. Your site is live at <code>openweb://${escapeHtml(options.published)}/</code>. <a href="/${escapeHtml(options.published)}/">open it →</a></div>`
+    : ''
+
+  const chooser = publisher.canChooseFolder()
+    ? `<form method="post" action="/publish">
+    <input type="hidden" name="action" value="choose" />
+    <button class="primary" type="submit">choose a folder…</button>
+  </form>`
+    : ''
+
+  return page(
+    'Publish',
+    `<main class="ow-wrap">
+  <p class="ow-kicker">Publish · this computer</p>
+  <h1 class="ow-h1">Put a folder on the web.</h1>
+  <p class="ow-lede">The folder is copied into a signed drive and served from this machine. Nothing is uploaded to a host, and you can take it offline whenever you like.</p>
+  ${flash(options.notice, options.error)}
+  ${published}
+  <div class="ow-split">
+    <section class="ow-panel">
+      <h2>Publish a folder</h2>
+      <p>Choose a folder of static files. It gets its own address; publishing another folder never overwrites this one.</p>
+      <div class="ow-actions">${chooser}</div>
+      <form class="ow-form" method="post" action="/publish">
+        <input type="hidden" name="action" value="folder" />
+        <label>Folder on this computer
+          <input name="folder" placeholder="C:\\Users\\you\\my-site" autocomplete="off" spellcheck="false" required />
+        </label>
+        <button type="submit">publish folder</button>
+      </form>
+    </section>
+    <section class="ow-panel">
+      <h2>Write a page instead</h2>
+      <p>The builder makes one self-contained HTML file and publishes it from the browser. No folder, no editor, no build step.</p>
+      <div class="ow-actions"><a href="/builder">open the builder →</a></div>
+      <p class="ow-hint">Want to share what you have crawled? <a href="/shared">Publish your search index</a>.</p>
+    </section>
+  </div>
+  <section class="ow-section">
+    <p class="ow-kicker">Your sites · ${sites.length}</p>
+    <h2>Everything this app is serving.</h2>
+    ${cards ? `<div class="ow-grid">${cards}</div>` : '<div class="ow-empty"><strong>Nothing published yet.</strong> Choose a folder above, or write a page in the builder.</div>'}
+  </section>
+  <footer class="ow-foot"><strong>OpenWeb</strong> — the drive lives in this app’s data folder and is seeded while the app is open.</footer>
+</main>`,
+  )
+}
+
+function sitesPage(
+  index: SqliteIndex,
+  publisher: GatewayPublisher | null,
+  options: { notice: string; error: string },
+): string {
   const sites = index.listSites(500)
   const body =
     sites.length === 0
       ? `<div class="ow-empty">
   <strong>No sites yet.</strong>
-  Run <code>openweb crawl &lt;address&gt;</code> with a gateway running, then come back.
+  <a href="/publish">Publish a folder</a> or crawl somebody else’s address below, and it will appear here.
 </div>`
       : `<div class="ow-grid">${sites.map(siteCard).join('')}</div>`
+
+  const pinned = publisher?.pinnedAddresses() ?? []
+  const pinList =
+    pinned.length === 0
+      ? '<p class="ow-hint">No pins yet. Pinning keeps a full replica of a site online while this app runs.</p>'
+      : `<ul class="ow-list">${pinned
+          .map(
+            (address) => `<li>
+  <span><code>${escapeHtml(address)}</code></span>
+  <div class="ow-actions">
+    <form method="post" action="/sites">
+      <input type="hidden" name="action" value="unpin" />
+      <input type="hidden" name="address" value="${address}" />
+      <button class="danger" type="submit">stop pinning</button>
+    </form>
+  </div>
+</li>`,
+          )
+          .join('')}</ul>`
+
+  const tools = publisher
+    ? `<div class="ow-split">
+    <section class="ow-panel">
+      <h2>Crawl a site</h2>
+      <p>Fetch an address into the local search index. The crawler follows links it finds on that address.</p>
+      <form class="ow-form" method="post" action="/sites">
+        <input type="hidden" name="action" value="crawl" />
+        <label>Address
+          <input name="address" placeholder="ow1…" autocomplete="off" spellcheck="false" required />
+        </label>
+        <label>Page limit
+          <input name="max" type="number" min="1" max="500" value="100" />
+        </label>
+        <button type="submit">crawl</button>
+      </form>
+    </section>
+    <section class="ow-panel">
+      <h2>Pin a site</h2>
+      <p>A pin downloads a full replica and seeds it. It stays online while this app is open.</p>
+      <form class="ow-form" method="post" action="/sites">
+        <input type="hidden" name="action" value="pin" />
+        <label>Address
+          <input name="address" placeholder="ow1…" autocomplete="off" spellcheck="false" required />
+        </label>
+        <button type="submit">pin and seed</button>
+      </form>
+      ${pinList}
+    </section>
+  </div>`
+    : ''
 
   return page(
     'Sites',
@@ -971,8 +1635,10 @@ function sitesPage(index: SqliteIndex): string {
   <p class="ow-kicker">Directory · ${sites.length} site(s) · ${index.documentCount.toLocaleString()} page(s)</p>
   <h1 class="ow-h1">Everything this machine has read.</h1>
   <p class="ow-lede">Grouped by address, because a site is a key. Anybody can run a crawler; this is the list yours found.</p>
+  ${flash(options.notice, options.error)}
   ${body}
-  <footer class="ow-foot"><strong>OpenWeb gateway</strong> — a directory of what you chose to crawl.</footer>
+  ${tools}
+  <footer class="ow-foot"><strong>OpenWeb gateway</strong> — a directory of what you chose to crawl. <a href="/publish">publish a folder</a>.</footer>
 </main>`,
   )
 }
@@ -1038,6 +1704,9 @@ interface DirectoryPageOptions {
   sourceAddress: string | null
   localDirectoryAddress: string | null
   error: string
+  notice: string
+  addAddress: string
+  canPublish: boolean
 }
 
 function directoryPage(
@@ -1050,7 +1719,7 @@ function directoryPage(
     sites.length === 0
       ? `<div class="ow-empty">
   <strong>No signed entries yet.</strong>
-  Create an identity and a directory with <code>openweb directory init</code>, then add a site with <code>openweb directory add &lt;address&gt;</code>.
+  ${verification ? 'Add a site below.' : 'Create a directory below, then add the sites you want to recommend.'}
 </div>`
       : `<div class="ow-grid">${sites
           .map(
@@ -1069,15 +1738,78 @@ function directoryPage(
       : `<p class="ow-error">This directory failed verification: ${escapeHtml(verification.errors.join('; '))}</p>`
     : ''
 
+  const createForm = verification
+    ? ''
+    : `<form class="ow-form" method="post" action="/directory">
+    <input type="hidden" name="action" value="init" />
+    <label>Directory name <input name="name" placeholder="Ada's list" required /></label>
+    <label>Description <input name="description" placeholder="What belongs on this list?" /></label>
+    <button type="submit">create a signed directory</button>
+  </form>`
+
+  const addForm = verification
+    ? `<form class="ow-form" method="post" action="/directory">
+    <input type="hidden" name="action" value="add" />
+    <label>Site address <input name="address" value="${escapeAttribute(options.addAddress)}" placeholder="ow1…" autocomplete="off" spellcheck="false" required /></label>
+    <label>Title <input name="title" placeholder="My site" /></label>
+    <label>Description <input name="description" placeholder="Why is it worth reading?" /></label>
+    <label>Tags <input name="tags" placeholder="garden, coffee (comma separated)" /></label>
+    <button type="submit">add and sign entry</button>
+  </form>`
+    : ''
+
+  const ownEntries =
+    verification?.entries.filter(({ entry }) => entry.signer === verification.document.author) ?? []
+  const manage =
+    ownEntries.length === 0
+      ? ''
+      : `<ul class="ow-list">${ownEntries
+          .map(
+            ({ entry }) => `<li>
+  <span><strong>${escapeHtml(entry.site.title)}</strong> · <code>${escapeHtml(entry.site.address)}</code></span>
+  <div class="ow-actions">
+    <a href="/${entry.site.address}/">open</a>
+    <form method="post" action="/directory">
+      <input type="hidden" name="action" value="remove" />
+      <input type="hidden" name="address" value="${entry.site.address}" />
+      <button class="danger" type="submit">remove</button>
+    </form>
+  </div>
+</li>`,
+          )
+          .join('')}</ul>`
+
+  const publishForm =
+    verification && options.canPublish
+      ? `<form class="ow-form" method="post" action="/directory">
+    <input type="hidden" name="action" value="publish" />
+    <p class="ow-hint">Publishing opens a drive for this signed file and keeps it online while the app runs. It keeps the same address across restarts.</p>
+    <button type="submit">publish this directory</button>
+  </form>`
+      : ''
+
   return page(
     'Directory',
     `<main class="ow-wrap">
   <p class="ow-kicker">Signed directory</p>
   <h1 class="ow-h1">A list a human signed.</h1>
   <p class="ow-lede">Every entry carries the key of the person who added it. No registry, no allow-once button: a mirror can repeat this list or refuse it, but it cannot quietly edit it.</p>
-  ${options.error ? `<p class="ow-error">${escapeHtml(options.error)}</p>` : ''}
+  ${flash(options.notice, options.error)}
   ${status}
   ${cards}
+  <div class="ow-split">
+    <section class="ow-panel">
+      <h2>${verification ? 'Add a site' : 'Start a directory'}</h2>
+      <p>${verification ? `Signed as <code>${escapeHtml(verification.document.author)}</code>. Each entry is signed before it is shown.` : 'A new Ed25519 identity is created on this computer. It signs the directory and every entry you add.'}</p>
+      ${createForm}${addForm}
+    </section>
+    <section class="ow-panel">
+      <h2>Publish it</h2>
+      <p>${options.localDirectoryAddress ? `Live at <code class="ow-code">${escapeHtml(options.localDirectoryAddress)}</code>.` : 'Not published yet. Publishing gives this list an address other people can load.'}</p>
+      ${manage}
+      ${publishForm}
+    </section>
+  </div>
   <section class="ow-section">
     <p class="ow-kicker">Load another directory</p>
     <p class="ow-lede">Paste the address of a published directory drive. It is fetched over the DHT and verified locally.</p>
@@ -1099,6 +1831,9 @@ function sharedPage(
   found: SearchResponse | null,
   tookMs: number,
   error: string,
+  publisher: GatewayPublisher | null,
+  notice: string,
+  noticeError: string,
 ): string {
   const results =
     found === null
@@ -1120,12 +1855,44 @@ function sharedPage(
       ? ''
       : `<p class="ow-meta">${manifest.documents.toLocaleString()} pages · ${manifest.terms.toLocaleString()} terms · ${(manifest.bytes / 1024 / 1024).toFixed(1)} MB · sha256 <code>${escapeHtml(manifest.sha256.slice(0, 16))}…</code>${found ? ` · ${found.total} result(s) in ${tookMs.toFixed(2)} ms` : ''}</p>`
 
+  const mine = publisher?.indexAddress() ?? null
+  const ourTools = publisher
+    ? `<div class="ow-split">
+    <section class="ow-panel">
+      <h2>Publish your index</h2>
+      <p>Snapshot what this machine has crawled, sign the manifest with its hash, and keep it online. Anyone with the address can query it without crawling.</p>
+      ${mine ? `<p>Live at <code class="ow-code">${escapeHtml(mine)}</code> · <a href="/shared?address=${encodeURIComponent(mine)}">query my index</a></p>` : '<p>No index published from this app yet.</p>'}
+      <form class="ow-form" method="post" action="/shared">
+        <input type="hidden" name="action" value="publish" />
+        <button type="submit">${mine ? 'republish my index' : 'publish my index'}</button>
+      </form>
+    </section>
+    <section class="ow-panel">
+      <h2>Import somebody’s index</h2>
+      <p>Fetch a shared index, verify its SHA-256 against the manifest, then merge it into your own search.</p>
+      <form class="ow-form" method="post" action="/shared">
+        <input type="hidden" name="action" value="import" />
+        <label>Index address
+          <input name="address" placeholder="ow1…" autocomplete="off" spellcheck="false" required />
+        </label>
+        <button type="submit">fetch &amp; import</button>
+      </form>
+    </section>
+  </div>`
+    : `<section class="ow-section">
+    <p class="ow-kicker">Publish yours</p>
+    <p class="ow-lede">This gateway is running without the desktop shell. Publish from a terminal instead:</p>
+    <pre><code>openweb index publish
+openweb index query &lt;address&gt; "slow garden"</code></pre>
+  </section>`
+
   return page(
     'Shared index',
     `<main class="ow-wrap">
   <p class="ow-kicker">Peer-published index</p>
   <h1 class="ow-h1">Query somebody else's crawl.</h1>
   <p class="ow-lede">A shared index is a Hyperdrive containing a verified SQLite snapshot. Fetch it once, query it locally, and skip the crawling.</p>
+  ${flash(notice, noticeError)}
   ${error ? `<p class="ow-error">${escapeHtml(error)}</p>` : ''}
   <form class="ow-open" action="/shared" method="get" style="margin-top:1.4rem">
     <input name="address" value="${address ? escapeHtml(address) : ''}" placeholder="ow1… index drive address" aria-label="Shared index address" autocomplete="off" spellcheck="false" />
@@ -1134,18 +1901,18 @@ function sharedPage(
   </form>
   ${info}
   ${results}
-  <section class="ow-section">
-    <p class="ow-kicker">Publish yours</p>
-    <p class="ow-lede">Snapshot the local index into a drive and stay online. Anyone with the address can query it without crawling.</p>
-    <pre><code>openweb index publish
-openweb index query &lt;address&gt; "slow garden"</code></pre>
-  </section>
+  ${ourTools}
   <footer class="ow-foot"><strong>OpenWeb gateway</strong> — a shared index is verified by SHA-256 before it is opened.</footer>
 </main>`,
   )
 }
 
-function builderPage(spec: SiteSpec, preview: string | null, generated: boolean): string {
+function builderPage(
+  spec: SiteSpec,
+  preview: string | null,
+  generated: boolean,
+  canPublish: boolean,
+): string {
   const sections = Array.from({ length: 3 }, (_, index) => spec.sections?.[index])
   const links = Array.from({ length: 2 }, (_, index) => spec.links?.[index])
 
@@ -1168,8 +1935,19 @@ function builderPage(spec: SiteSpec, preview: string | null, generated: boolean)
     )
     .join('\n')
 
-  const hidden = generated
-    ? `<form method="post" action="/builder" style="margin-top:.7rem">
+  const publish = generated
+    ? canPublish
+      ? `<form class="ow-actions" method="post" action="/publish">
+  ${hiddenFields(spec)}
+  <input type="hidden" name="action" value="page" />
+  <button class="primary" type="submit">publish this page</button>
+</form>
+<form class="ow-actions" method="post" action="/builder">
+  ${hiddenFields(spec)}
+  <input type="hidden" name="download" value="1" />
+  <button type="submit">download index.html</button>
+</form>`
+      : `<form class="ow-actions" method="post" action="/builder">
   ${hiddenFields(spec)}
   <input type="hidden" name="download" value="1" />
   <button type="submit">download index.html</button>
@@ -1181,9 +1959,9 @@ function builderPage(spec: SiteSpec, preview: string | null, generated: boolean)
     `<main class="ow-wrap">
   <p class="ow-kicker">Website builder · static, signed, yours</p>
   <h1 class="ow-h1">Make a page without a framework.</h1>
-  <p class="ow-lede">Fill this in, download one HTML file, and publish the folder with <code>openweb serve</code>. No account, no scripts, no build step.</p>
+  <p class="ow-lede">Fill this in, preview it, and publish straight from the browser. One self-contained HTML file: no account, no scripts, no build step.</p>
   ${generated ? `<p class="ow-meta">Preview below. The file is self-contained; links starting with <code>/</code> are resolved by the gateway.</p>` : ''}
-  ${preview ? `<iframe class="ow-preview" sandbox title="Generated page preview" srcdoc="${escapeAttribute(preview)}"></iframe>${hidden}` : ''}
+  ${preview ? `<iframe class="ow-preview" sandbox title="Generated page preview" srcdoc="${escapeAttribute(preview)}"></iframe><div class="ow-actions">${publish}</div>` : ''}
   <form class="ow-form" method="post" action="/builder">
     <label>Title <input name="title" value="${escapeAttribute(spec.title)}" required /></label>
     <label>Tagline <input name="tagline" value="${escapeAttribute(spec.tagline)}" required /></label>
@@ -1202,7 +1980,6 @@ function builderPage(spec: SiteSpec, preview: string | null, generated: boolean)
       <button type="submit" name="download" value="1">download index.html</button>
     </div>
   </form>
-  <p class="ow-hint" style="margin-top:1rem">Prefer the terminal? <code>openweb new my-site --title "My page"</code></p>
   <footer class="ow-foot"><strong>OpenWeb builder</strong> — one file, no JavaScript, nothing fetched from somebody else's server.</footer>
 </main>`,
   )

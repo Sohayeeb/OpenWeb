@@ -6,7 +6,7 @@
  * There is no server in the middle. If this process stops, the site is offline.
  */
 
-import { readFromDrive } from '@openweb/core'
+import { readFromDrive, type FileResponse } from '@openweb/core'
 import Hyperswarm from 'hyperswarm'
 import { createServer, type Server } from 'node:http'
 import { resolve } from 'node:path'
@@ -33,6 +33,8 @@ export interface OpenWebNode {
   published: number
   /** Drive version after publishing, so a gateway can wait for this exact state. */
   version: number
+  /** Read a file straight from the local drive, without a loopback request. */
+  read(path: string): Promise<FileResponse>
   close(): Promise<void>
 }
 
@@ -86,6 +88,9 @@ export async function startNode(options: NodeOptions = {}): Promise<OpenWebNode>
     port: boundPort,
     published,
     version: (site.drive as unknown as { version: number }).version,
+    read(path: string): Promise<FileResponse> {
+      return readFromDrive(site.drive, path)
+    },
     async close() {
       await closing(server)
       await discovery.destroy()

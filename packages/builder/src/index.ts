@@ -39,7 +39,7 @@ export function defaultSpec(): SiteSpec {
     title: 'A small page',
     tagline: 'Written by a person, served from a computer.',
     description:
-      'This page was made with the OpenWeb builder. Replace these words with your own, then publish the folder.',
+      'This page was made with the OpenWeb builder. Replace these words with your own, then publish it from the browser.',
     author: '',
     sections: [
       {

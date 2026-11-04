@@ -14,8 +14,9 @@ import { SqliteIndex, indexFileFor, sqliteIndexExists } from '@openweb/index'
 import { readPins } from '@openweb/node'
 import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { readPublishedSites } from './published.js'
 
-export type SiteSource = 'pinned' | 'site' | 'directory'
+export type SiteSource = 'published' | 'pinned' | 'site' | 'directory'
 
 export interface LauncherSite {
   address: string
@@ -61,6 +62,17 @@ export function listLauncherSites(dir: string): LauncherSite[] {
     } finally {
       index?.close()
     }
+  }
+
+  // Sites published from this app. These win over anything else with the same
+  // address, because the user named them here on purpose.
+  for (const record of readPublishedSites(dir)) {
+    add({
+      address: record.address,
+      title: record.title || shortAddress(record.address),
+      source: 'published',
+      rank: 4,
+    })
   }
 
   // Sites this machine keeps online on purpose.
@@ -121,6 +133,8 @@ function fromDirectory(site: DirectorySite): Candidate {
 
 function sourceRank(source: SiteSource): number {
   switch (source) {
+    case 'published':
+      return 4
     case 'directory':
       return 3
     case 'pinned':

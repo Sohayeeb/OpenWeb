@@ -12,6 +12,7 @@ import { SqliteIndex, crawl, indexFileFor, type Document } from '@openweb/index'
 import { readPins, startNode, startPin, type OpenWebNode, type PinnedSite } from '@openweb/node'
 import { mkdirSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { Publisher } from './publisher.js'
 
 export interface IndexSummary {
   /** Pages in the index after this crawl. */
@@ -27,6 +28,8 @@ export interface StackOptions {
   siteFolder?: string
   /** Re-crawl the local site this often. Defaults to 30 minutes. */
   indexIntervalMs?: number
+  /** Native folder picker supplied by the shell, used by the publish page. */
+  chooseFolder?: () => Promise<string | null>
   onStatus?: (message: string) => void
   onError?: (error: unknown) => void
 }
@@ -36,6 +39,7 @@ export interface Stack {
   address: string
   gatewayUrl: string
   gatewayPort: number
+  publisher: Publisher
   /** Resolves when the first local index pass is done (never rejects). */
   initialIndex: Promise<IndexSummary | null>
   refreshIndex(): Promise<IndexSummary | null>
@@ -58,8 +62,20 @@ export async function startStack(options: StackOptions): Promise<Stack> {
     port: 0,
   })
 
+  const publisher = new Publisher({
+    dir,
+    ...(options.chooseFolder ? { chooseFolder: options.chooseFolder } : {}),
+    onStatus: status,
+    onError,
+  })
+  publisher.registerBuiltin(node.address, 'OpenWeb', options.siteFolder ?? '', node)
+
+  status('restoring your published sites…')
+  await publisher.restore()
+
   status('opening the gateway…')
-  const gateway: Gateway = await startGateway({ dir, port: 0, timeoutMs: 20_000 })
+  const gateway: Gateway = await startGateway({ dir, port: 0, timeoutMs: 20_000, publisher })
+  publisher.setGateway(gateway)
 
   // A read-only drive can sync an older version first. Wait for the version
   // this process just published, exactly like `openweb start` does.
@@ -76,8 +92,8 @@ export async function startStack(options: StackOptions): Promise<Stack> {
         status('indexing this machine’s web…')
         const documents: Document[] = await crawl({
           gateway: gateway.url.replace(/\/+$/, ''),
-          seeds: [node.address],
-          maxPages: 50,
+          seeds: publisher.localAddresses(),
+          maxPages: 200,
           concurrency: 4,
         })
 
@@ -107,6 +123,12 @@ export async function startStack(options: StackOptions): Promise<Stack> {
 
   const initialIndex = refreshIndex()
 
+  // Directory and index shares keep the same address across launches; bring
+  // them back after the first index pass so the snapshot is current.
+  void initialIndex.then(() => {
+    if (!closing) void publisher.restoreShares()
+  })
+
   // Keep the local site searchable while the app stays open.
   const timer = setInterval(() => {
     if (!closing) void refreshIndex()
@@ -135,6 +157,7 @@ export async function startStack(options: StackOptions): Promise<Stack> {
     address: node.address,
     gatewayUrl: gateway.url,
     gatewayPort: gateway.port,
+    publisher,
     initialIndex,
     refreshIndex,
     stats(): IndexSummary | null {
@@ -164,6 +187,7 @@ export async function startStack(options: StackOptions): Promise<Stack> {
         ])
       }
       await gateway.close().catch(() => undefined)
+      await publisher.close().catch(() => undefined)
       await node.close().catch(() => undefined)
     },
   }

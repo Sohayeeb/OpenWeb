@@ -12,12 +12,15 @@ const els = {
 
 const QUICK = [
   { label: 'Home', glyph: '⌂', target: 'openweb://home' },
+  { label: 'Publish', glyph: '↑', target: 'openweb://publish' },
   { label: 'Sites', glyph: '▤', target: 'openweb://sites' },
   { label: 'Directory', glyph: '✓', target: 'openweb://directory' },
+  { label: 'Search index', glyph: '⌕', target: 'openweb://shared' },
   { label: 'Builder', glyph: '✎', target: 'openweb://builder' },
 ]
 
 const SOURCE_LABEL = {
+  published: 'Published here',
   pinned: 'Pinned',
   directory: 'Directory',
   site: 'Known sites',

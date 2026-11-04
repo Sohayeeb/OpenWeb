@@ -7,9 +7,10 @@ No ads. No trackers. No AI-generated content. No hosting bill.
 gateway, crawls the site into a local SQLite index, and opens a Chrome-style new
 tab. The new `packages/desktop` app is a standalone Electron browser: the window
 *is* the browser, with its own address bar, tabs, app launcher, and an installer.
-Sites survive their author going offline when somebody pins them; indexes and
-directories can be published as drives; the website builder writes one static HTML
-file.
+Publishing, crawling, pinning, directories, the builder, and index sharing are all
+pages in that window — no terminal is needed, ever. Sites survive their author
+going offline when somebody pins them; indexes and directories can be published as
+drives; the website builder writes one static HTML file.
 
 Requires **Node 24 or newer** to build from source (the index uses the built-in
 `node:sqlite`). The Windows installer bundles its own runtime; end users do not
@@ -69,11 +70,39 @@ reimplementing them:
   `openweb://` addresses to that origin and never exposes it in the UI.
 - `@openweb/index` crawls the local site into `%APPDATA%\OpenWeb\index.db` and
   refreshes it while the app stays open.
+- `@openweb/desktop`'s publisher owns every site published from the app. Each
+  folder gets its own drive, key, and address in
+  `%APPDATA%\OpenWeb\sites\`, so publishing a second folder never overwrites the
+  first.
 - Pins in `%APPDATA%\OpenWeb\pins.json` are re-seeded in the background.
 
 Gateway pages rendered for the shell request with `x-openweb-desktop: 1`, so the
-gateway suppresses its own browser bar and service worker. Everything lives under
-`%APPDATA%\OpenWeb`, including `openweb.log`.
+gateway suppresses its own browser bar and service worker. Page views have
+JavaScript disabled, matching the static-only rule: no published page can script
+the browser or the gateway's forms. Everything lives under `%APPDATA%\OpenWeb`,
+including `openweb.log` and the `sites.json` registry. Set `OPENWEB_DATA_DIR` to
+use another profile (the smoke run does).
+
+### Everything in the browser
+
+The desktop app never asks you to open a terminal. Each task is a page with
+server-rendered forms, so it works without JavaScript on the page:
+
+| Page | What you can do |
+| --- | --- |
+| `/publish` | Choose a folder with the native picker, publish it, republish it, take it offline, or publish the current search index |
+| `/builder` | Write a page, preview it in a sandboxed iframe, then publish it as its own site |
+| `/sites` | Crawl an address, pin a site, stop pinning, and open anything indexed |
+| `/directory` | Create a signed directory, add and remove sites, and publish the signed document |
+| `/shared` | Publish your local index as a drive, query a remote one, or import it |
+| `/search` | Query the local index |
+
+Forms post to the gateway and redirect back with a notice. They are same-origin
+only, so another website cannot publish or delete a site through the loopback
+port. Published folders, directory shares, and index shares are restored
+automatically the next time the app launches. A plain `openweb gateway` without
+the shell still renders the same pages, and explains the CLI equivalent where a
+native folder picker is required.
 
 ### Builds and channels
 
@@ -150,11 +179,12 @@ Addresses look like `ow1x7f2k...` and are public keys. Nothing to register.
 | `/` | Chrome-style new tab: search, app launcher, recent sites |
 | `/<address>/` | Resolve a key, join its DHT topic, stream the files |
 | `/search?q=...` | Query the local index; add `&format=json` for machines |
-| `/sites` | Every crawled address, grouped by key, with page counts |
-| `/directory` | The local signed directory; `?address=` loads a remote one |
+| `/sites` | Every crawled address, grouped by key, with page counts; crawl and pin forms |
+| `/publish` | Publish a folder, republish a site, or take one offline |
+| `/directory` | The local signed directory; `?address=` loads a remote one; add/remove/publish |
 | `/directory?format=json` | The exact signed document, for the extension |
-| `/shared?address=...` | Query an index somebody published as a drive |
-| `/builder` | The website builder (GET form, POST preview/download) |
+| `/shared?address=...` | Query an index somebody published as a drive; publish or import one |
+| `/builder` | The website builder (GET form, POST preview/download/publish) |
 | `/open?to=...` | The address bar: key, `openweb://` link, or gateway path |
 | `/manifest.webmanifest`, `/sw.js`, `/icon-*.png` | Installable app shell |
 
@@ -329,10 +359,12 @@ openweb new my-site --title "My page" --tagline "A small thing I made" --theme p
 openweb serve my-site
 ```
 
-Or use `/builder` on the gateway: fill in the form, preview it in a sandboxed
-iframe, and download `index.html`. The server renders the file, so a published page
-never needs JavaScript to exist. User text is HTML-escaped, and `javascript:` links
-are replaced with `#`.
+Or use `/builder` in the desktop app: fill in the form, preview it in a sandboxed
+iframe, and click **publish this page**. It becomes its own site, with its own
+address, without a folder picker or a terminal. A plain gateway offers the same
+builder with a download button instead. The server renders the file, so a published
+page never needs JavaScript to exist. User text is HTML-escaped, and `javascript:`
+links are replaced with `#`.
 
 ## How it works
 
@@ -394,16 +426,22 @@ npm run package        # Windows NSIS installer with the desktop browser
 ```
 
 The desktop shell is also exercised directly: `OPENWEB_SMOKE=1` drives the real
-chrome through a search, a local site, the launcher, and tab creation/closing, then
-exits with a JSON report.
+chrome through a search, a local site, the launcher, and tab creation/closing,
+then publishes a temporary folder through the browser form, reads the page back
+out of the gateway, checks the launcher, takes it offline, and deletes the state
+it created before exiting with a JSON report. Run it with
+`OPENWEB_DATA_DIR=%TEMP%\openweb-smoke` to keep the real profile untouched.
 
 The e2e scripts assert on content, so a regression fails loudly. They need the DHT
 and run on loopback; no external services are involved.
 
 ## Known limits (deliberate, for now)
 
-- One published folder per stack. Pinned sites are extra read-only replicas; there
-  is no multi-site editor.
+- Sites published from the app are folders on this computer. They stay online only
+  while OpenWeb is running, and they are restored on the next launch.
+- The app can publish many folders at once, but there is no visual editor for a
+  site's files: the builder writes one page, and folder publishing copies what is
+  already there.
 - The gateway keeps no page cache on disk: a cold page load refetches from the
   network.
 - First load after connecting can take a few seconds while metadata syncs.
@@ -415,8 +453,8 @@ and run on loopback; no external services are involved.
   pages.
 - The extension permits localhost generally so a second gateway port still works;
   `strict` still limits OpenWeb paths to signed addresses.
-- The desktop app publishes the bundled `app/` folder. Authoring your own site is
-  still the `openweb serve <folder>` / `openweb new` workflow.
+- Sites published from this machine are reachable by anybody who has the address
+  while the app is open. There is no hosted fallback.
 - Ranking is lexical. Synonyms and fuzzy matching are a small hand-written table
   and bounded edit distance, not a model.
 - Static files only. No JavaScript executes on published pages.
@@ -426,6 +464,6 @@ and run on loopback; no external services are involved.
 ## Next
 
 1. A live, incremental shared-index format instead of whole snapshots.
-2. Multiple published sites from one stack, with per-site pins and stats.
-3. A directory merge view across several trusted lists.
+2. A directory merge view across several trusted lists.
+3. Site editing inside the app: reorder pages, edit files, republish with one click.
 4. A small reputation signal that does not become a popularity contest.
